@@ -7,6 +7,7 @@ class SettingsUpdate(BaseModel):
     system_prompt: str | None = None
     replies_per_post: int | None = None
     openrouter_api_key: str | None = None
+    x_api_key: str | None = None
 
 
 class SettingsResponse(BaseModel):
@@ -15,6 +16,7 @@ class SettingsResponse(BaseModel):
     system_prompt: str
     replies_per_post: int
     openrouter_api_key: str = ""
+    x_api_key: str = ""
 
 
 class ScraperStatusResponse(BaseModel):
@@ -24,3 +26,4 @@ class ScraperStatusResponse(BaseModel):
     accounts_checked: int | None
     posts_found: int | None
     next_run_at: str | None
+    status_message: str | None = None

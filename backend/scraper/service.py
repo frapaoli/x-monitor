@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import httpx
-import twscrape
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -13,6 +12,7 @@ from config import settings
 from models.account import MonitoredAccount
 from models.post import Post
 from models.settings import AppSetting
+from x_api.client import XAPIClient, XAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +30,12 @@ class RawPost:
 class ScraperService:
     def __init__(
         self,
-        twscrape_api: twscrape.API,
+        x_api_client: XAPIClient,
         db_session_factory: async_sessionmaker[AsyncSession],
         llm_service,
         http_client: httpx.AsyncClient,
     ):
-        self.api = twscrape_api
+        self.x_api = x_api_client
         self.db_session_factory = db_session_factory
         self.llm_service = llm_service
         self.http_client = http_client
@@ -46,6 +46,7 @@ class ScraperService:
         self.last_run_duration: float | None = None
         self.last_accounts_checked: int | None = None
         self.last_posts_found: int | None = None
+        self.last_error: str | None = None
 
     async def poll_account(self, account: MonitoredAccount) -> list[RawPost]:
         try:
@@ -53,44 +54,41 @@ class ScraperService:
                 logger.warning(f"Account @{account.username} has no x_user_id, skipping")
                 return []
 
-            user_id = int(account.x_user_id)
-            tweets = []
-            async for tweet in self.api.user_tweets(user_id, limit=20):
-                tweets.append(tweet)
+            tweets = await self.x_api.get_user_tweets(
+                user_id=account.x_user_id,
+                max_results=20,
+                since_id=account.last_post_id,
+            )
 
             new_posts = []
             for tweet in tweets:
-                tweet_id = str(tweet.id)
-                if account.last_post_id and tweet_id <= account.last_post_id:
-                    continue
+                media_urls = [m.url for m in tweet.media if m.url]
 
-                media_urls = []
-                if tweet.media and hasattr(tweet.media, "photos"):
-                    for photo in tweet.media.photos:
-                        if hasattr(photo, "url"):
-                            media_urls.append(photo.url)
-
-                # Determine post type
-                post_type = "tweet"
-                if hasattr(tweet, "retweetedTweet") and tweet.retweetedTweet:
+                # Map referenced_type to post_type
+                ref = tweet.referenced_type
+                if ref == "retweeted":
                     post_type = "retweet"
-                elif hasattr(tweet, "quotedTweet") and tweet.quotedTweet:
+                elif ref == "quoted":
                     post_type = "quote"
-                elif hasattr(tweet, "inReplyToTweetId") and tweet.inReplyToTweetId:
+                elif ref == "replied_to":
                     post_type = "reply"
-
-                posted_at = tweet.date if hasattr(tweet, "date") and tweet.date else datetime.now(timezone.utc)
+                else:
+                    post_type = "tweet"
 
                 new_posts.append(RawPost(
-                    external_id=tweet_id,
-                    text=tweet.rawContent if hasattr(tweet, "rawContent") else str(tweet),
+                    external_id=tweet.id,
+                    text=tweet.text,
                     media_urls=media_urls,
                     post_type=post_type,
-                    posted_at=posted_at,
+                    posted_at=tweet.created_at,
                     username=account.username,
                 ))
 
             return new_posts
+        except XAPIError as e:
+            logger.error(f"X API error polling @{account.username}: {e}")
+            self.last_error = str(e)
+            return []
         except Exception as e:
             logger.error(f"Failed to poll @{account.username}: {e}")
             return []
@@ -100,7 +98,13 @@ class ScraperService:
             logger.warning("Poll cycle already in progress, skipping")
             return []
 
+        if not self.x_api.is_configured:
+            logger.warning("X API Bearer Token not configured, skipping poll cycle")
+            self.last_error = "X API Bearer Token not configured"
+            return []
+
         self.is_running = True
+        self.last_error = None
         start_time = datetime.now(timezone.utc)
         all_new_posts = []
         accounts_checked = 0
@@ -218,7 +222,7 @@ class ScraperService:
                 await session.flush()
 
                 # Track newest post for updating last_post_id
-                if newest_id is None or raw.external_id > newest_id:
+                if newest_id is None or int(raw.external_id) > int(newest_id):
                     newest_id = raw.external_id
 
                 saved.append(raw)
@@ -240,9 +244,10 @@ class ScraperService:
     async def resolve_user_id(self, username: str) -> tuple[str | None, str | None]:
         """Resolve a username to a numeric X user ID and display name."""
         try:
-            user = await self.api.user_by_login(username)
-            if user:
-                return str(user.id), user.displayname
+            user = await self.x_api.get_user_by_username(username)
+            return user.id, user.name
+        except XAPIError as e:
+            logger.error(f"X API error resolving @{username}: {e}")
         except Exception as e:
             logger.error(f"Failed to resolve user @{username}: {e}")
         return None, None

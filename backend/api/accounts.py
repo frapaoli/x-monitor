@@ -82,8 +82,8 @@ async def create_account(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail=f"Account @{username} is already being monitored")
 
-    # Resolve user ID via twscrape (if available)
-    from main import app_state
+    # Resolve user ID via X API
+    from app_state import app_state
     x_user_id = None
     display_name = None
     if app_state.get("scraper_service"):
@@ -118,7 +118,7 @@ async def bulk_create_accounts(
                 results.append(BulkCreateResult(username=username, success=False, error="Already monitored"))
                 continue
 
-            from main import app_state
+            from app_state import app_state
             x_user_id = None
             display_name = None
             if app_state.get("scraper_service"):

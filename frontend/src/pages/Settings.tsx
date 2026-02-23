@@ -23,6 +23,7 @@ function SettingsInner() {
   const [prompt, setPrompt] = useState('')
   const [repliesCount, setRepliesCount] = useState(10)
   const [apiKey, setApiKey] = useState('')
+  const [xApiKey, setXApiKey] = useState('')
 
   const toast = useToast()
 
@@ -40,6 +41,7 @@ function SettingsInner() {
       setPrompt(s.system_prompt)
       setRepliesCount(s.replies_per_post)
       setApiKey('')
+      setXApiKey('')
     } catch {
       toast('Failed to load settings')
     } finally {
@@ -67,9 +69,11 @@ function SettingsInner() {
         replies_per_post: repliesCount,
       }
       if (apiKey) data.openrouter_api_key = apiKey
+      if (xApiKey) data.x_api_key = xApiKey
       await api.updateSettings(data)
       toast('Settings saved')
       setApiKey('')
+      setXApiKey('')
     } catch {
       toast('Failed to save settings')
     } finally {
@@ -113,6 +117,11 @@ function SettingsInner() {
             {polling ? 'Starting...' : 'Poll Now'}
           </button>
         </div>
+        {scraperStatus?.status_message && (
+          <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+            <p className="text-xs font-mono text-amber-400">{scraperStatus.status_message}</p>
+          </div>
+        )}
         {scraperStatus ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <StatusItem
@@ -228,6 +237,21 @@ function SettingsInner() {
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
             placeholder={settings?.openrouter_api_key || 'Enter API key to update'}
+            className="w-full bg-deep border border-slate-mid rounded-lg px-3 py-2 text-sm text-mist placeholder:text-steel focus:outline-none focus:border-cyan-glow/50 transition-colors font-mono"
+          />
+          <p className="text-[10px] font-mono text-steel mt-1">Leave blank to keep current key</p>
+        </div>
+
+        {/* TwitterAPI.io API Key */}
+        <div>
+          <label className="block text-[11px] font-mono text-ash uppercase tracking-wider mb-1.5">
+            TwitterAPI.io API Key
+          </label>
+          <input
+            type="password"
+            value={xApiKey}
+            onChange={e => setXApiKey(e.target.value)}
+            placeholder={settings?.x_api_key || 'Enter TwitterAPI.io key to update'}
             className="w-full bg-deep border border-slate-mid rounded-lg px-3 py-2 text-sm text-mist placeholder:text-steel focus:outline-none focus:border-cyan-glow/50 transition-colors font-mono"
           />
           <p className="text-[10px] font-mono text-steel mt-1">Leave blank to keep current key</p>

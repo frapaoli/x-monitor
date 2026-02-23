@@ -1,16 +1,27 @@
 import asyncio
+import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
+
+# Add backend/ to Python path so imports work when running alembic from any directory
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from config import settings as app_settings
 from database import Base
 from models import MonitoredAccount, Post, GeneratedReply, AppSetting  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Use DATABASE_URL from our pydantic settings (reads .env file)
+# This handles special characters in passwords correctly
+config.set_main_option("sqlalchemy.url", app_settings.database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

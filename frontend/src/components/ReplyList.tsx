@@ -7,11 +7,18 @@ interface Props {
   replies: Reply[]
   postLlmStatus: string
   onRegenerate: () => void
+  onReplyUpdate?: (updated: Reply) => void
 }
 
-export default function ReplyList({ replies, postLlmStatus, onRegenerate }: Props) {
+export default function ReplyList({ replies, postLlmStatus, onRegenerate, onReplyUpdate }: Props) {
   const toast = useToast()
   const [regenerating, setRegenerating] = useState(false)
+  const [localReplies, setLocalReplies] = useState<Reply[]>(replies)
+
+  // Sync with parent when replies prop changes
+  if (replies !== localReplies && replies.length > 0 && replies[0]?.id !== localReplies[0]?.id) {
+    setLocalReplies(replies)
+  }
 
   const handleCopy = async (text: string, index: number) => {
     await navigator.clipboard.writeText(text)
@@ -19,12 +26,24 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate }: Prop
   }
 
   const handleFavorite = async (reply: Reply) => {
-    await api.updateReply(reply.id, { is_favorite: !reply.is_favorite })
+    try {
+      const updated = await api.updateReply(reply.id, { is_favorite: !reply.is_favorite })
+      setLocalReplies(prev => prev.map(r => r.id === reply.id ? updated : r))
+      onReplyUpdate?.(updated)
+    } catch {
+      toast('Failed to update')
+    }
   }
 
   const handleUsed = async (reply: Reply) => {
-    await api.updateReply(reply.id, { was_used: true })
-    toast('Marked as used')
+    try {
+      const updated = await api.updateReply(reply.id, { was_used: true })
+      setLocalReplies(prev => prev.map(r => r.id === reply.id ? updated : r))
+      onReplyUpdate?.(updated)
+      toast('Marked as used')
+    } catch {
+      toast('Failed to update')
+    }
   }
 
   if (postLlmStatus === 'processing') {
@@ -54,7 +73,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate }: Prop
     )
   }
 
-  if (postLlmStatus === 'pending' || replies.length === 0) {
+  if (postLlmStatus === 'pending' || localReplies.length === 0) {
     return (
       <div className="mt-3 p-4 border border-slate-mid rounded-lg bg-deep/50">
         <span className="text-sm text-ash font-mono">Replies pending...</span>
@@ -66,7 +85,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate }: Prop
     <div className="mt-3 space-y-0">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] font-mono text-ash uppercase tracking-wider">
-          Replies ({replies.length})
+          Replies ({localReplies.length})
         </span>
         <button
           onClick={async () => {
@@ -80,7 +99,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate }: Prop
         </button>
       </div>
       <div className="border border-slate-mid/70 rounded-lg overflow-hidden divide-y divide-slate-mid/40">
-        {replies.map((reply) => (
+        {localReplies.map((reply) => (
           <div
             key={reply.id}
             className="group flex items-start gap-3 px-3 py-2.5 hover:bg-slate-mid/20 transition-colors"

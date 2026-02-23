@@ -77,6 +77,7 @@ export interface Settings {
   system_prompt: string;
   replies_per_post: number;
   openrouter_api_key: string;
+  x_api_key: string;
 }
 
 export interface ScraperStatus {
@@ -86,6 +87,7 @@ export interface ScraperStatus {
   accounts_checked: number | null;
   posts_found: number | null;
   next_run_at: string | null;
+  status_message: string | null;
 }
 
 export interface BulkResult {

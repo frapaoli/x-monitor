@@ -2,7 +2,7 @@ import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -170,15 +170,14 @@ async def regenerate_replies(post_id: uuid.UUID, db: AsyncSession = Depends(get_
         raise HTTPException(status_code=404, detail="Post not found")
 
     # Delete existing replies
-    from sqlalchemy import delete
-    await db.execute(delete(GeneratedReply).where(GeneratedReply.post_id == post.id))
+    from sqlalchemy import delete as sa_delete
+    await db.execute(sa_delete(GeneratedReply).where(GeneratedReply.post_id == post.id))
     post.llm_status = "pending"
     post.replies = []
     await db.flush()
-    await db.commit()
 
     # Trigger LLM generation
-    from main import app_state
+    from app_state import app_state
     if app_state.get("llm_service"):
         asyncio.create_task(app_state["llm_service"].generate_replies(str(post.id)))
 

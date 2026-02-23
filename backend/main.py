@@ -4,7 +4,6 @@ import os
 from contextlib import asynccontextmanager
 
 import httpx
-import twscrape
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +13,7 @@ from api.accounts import router as accounts_router
 from api.posts import router as posts_router
 from api.replies import router as replies_router
 from api.settings import router as settings_router
+from app_state import app_state
 from config import settings
 from database import async_session_factory, engine
 from llm.service import LLMService
@@ -21,12 +21,10 @@ from models.post import Post
 from models.settings import AppSetting
 from scraper.scheduler import setup_scheduler
 from scraper.service import ScraperService
+from x_api.client import XAPIClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-# Global application state shared across modules
-app_state: dict = {}
 
 
 @asynccontextmanager
@@ -37,25 +35,21 @@ async def lifespan(app: FastAPI):
     http_client = httpx.AsyncClient()
     app_state["http_client"] = http_client
 
-    # Initialize twscrape API and login accounts
-    twscrape_api = twscrape.API()
-    if settings.twscrape_accounts:
-        for account_str in settings.twscrape_accounts.split(","):
-            parts = account_str.strip().split(":")
-            if len(parts) == 4:
-                username, password, email, email_password = parts
-                try:
-                    await twscrape_api.pool.add_account(username, password, email, email_password)
-                    logger.info(f"Added twscrape account: {username}")
-                except Exception as e:
-                    logger.warning(f"Failed to add twscrape account {username}: {e}")
-        try:
-            await twscrape_api.pool.login_all()
-            logger.info("twscrape accounts logged in")
-        except Exception as e:
-            logger.warning(f"twscrape login error (will continue without scraping): {e}")
+    # Initialize X API client (prefer DB-stored key, fall back to env)
+    x_api_key = settings.x_api_key
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(select(AppSetting).where(AppSetting.key == "x_api_key"))
+            row = result.scalar_one_or_none()
+            if row and row.value:
+                x_api_key = str(row.value)
+    except Exception:
+        pass
 
-    app_state["twscrape_api"] = twscrape_api
+    x_api_client = XAPIClient(api_key=x_api_key)
+    app_state["x_api_client"] = x_api_client
+    if not x_api_client.is_configured:
+        logger.warning("TwitterAPI.io API key not configured — scraping will be disabled until set via Settings")
 
     # Get API key (prefer DB setting, fall back to env)
     api_key = settings.openrouter_api_key
@@ -73,7 +67,7 @@ async def lifespan(app: FastAPI):
     app_state["llm_service"] = llm_service
 
     scraper_service = ScraperService(
-        twscrape_api=twscrape_api,
+        x_api_client=x_api_client,
         db_session_factory=async_session_factory,
         llm_service=llm_service,
         http_client=http_client,
@@ -117,6 +111,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down X Monitor...")
     scheduler.shutdown(wait=False)
+    await x_api_client.close()
     await http_client.aclose()
     await engine.dispose()
     logger.info("Shutdown complete")

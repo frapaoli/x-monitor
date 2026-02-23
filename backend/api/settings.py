@@ -1,6 +1,3 @@
-import asyncio
-import json
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +14,7 @@ DEFAULT_SETTINGS = {
     "system_prompt": "You are a knowledgeable and engaging social media user. Generate reply suggestions that are thoughtful, concise, and varied in tone.",
     "replies_per_post": 10,
     "openrouter_api_key": "",
+    "x_api_key": "",
 }
 
 
@@ -38,6 +36,7 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
         system_prompt=str(s["system_prompt"]),
         replies_per_post=int(s["replies_per_post"]),
         openrouter_api_key=_mask_key(str(s.get("openrouter_api_key", ""))),
+        x_api_key=_mask_key(str(s.get("x_api_key", ""))),
     )
 
 
@@ -56,7 +55,7 @@ async def update_settings(data: SettingsUpdate, db: AsyncSession = Depends(get_d
 
     # Reschedule if polling interval changed
     if data.polling_interval_minutes is not None:
-        from main import app_state
+        from app_state import app_state
         scheduler = app_state.get("scheduler")
         if scheduler:
             from scraper.scheduler import reschedule
@@ -64,10 +63,17 @@ async def update_settings(data: SettingsUpdate, db: AsyncSession = Depends(get_d
 
     # Update LLM service API key if changed
     if data.openrouter_api_key is not None:
-        from main import app_state
+        from app_state import app_state
         llm_service = app_state.get("llm_service")
         if llm_service:
             llm_service.api_key = data.openrouter_api_key
+
+    # Update X API key at runtime if changed
+    if data.x_api_key is not None:
+        from app_state import app_state
+        x_api_client = app_state.get("x_api_client")
+        if x_api_client:
+            x_api_client.api_key = data.x_api_key
 
     s = await _get_all_settings(db)
     return SettingsResponse(
@@ -76,6 +82,7 @@ async def update_settings(data: SettingsUpdate, db: AsyncSession = Depends(get_d
         system_prompt=str(s["system_prompt"]),
         replies_per_post=int(s["replies_per_post"]),
         openrouter_api_key=_mask_key(str(s.get("openrouter_api_key", ""))),
+        x_api_key=_mask_key(str(s.get("x_api_key", ""))),
     )
 
 
@@ -87,7 +94,7 @@ def _mask_key(key: str) -> str:
 
 @router.get("/scraper-status", response_model=ScraperStatusResponse)
 async def scraper_status():
-    from main import app_state
+    from app_state import app_state
     scraper = app_state.get("scraper_service")
     scheduler = app_state.get("scheduler")
 
@@ -103,6 +110,14 @@ async def scraper_status():
             accounts_checked=None, posts_found=None, next_run_at=next_run,
         )
 
+    # Build status message
+    x_api_client = app_state.get("x_api_client")
+    status_message = None
+    if x_api_client and not x_api_client.is_configured:
+        status_message = "TwitterAPI.io API key not configured — set it below to enable scraping"
+    elif scraper.last_error:
+        status_message = scraper.last_error
+
     return ScraperStatusResponse(
         is_running=scraper.is_running,
         last_run_at=scraper.last_run_at.isoformat() if scraper.last_run_at else None,
@@ -110,4 +125,5 @@ async def scraper_status():
         accounts_checked=scraper.last_accounts_checked,
         posts_found=scraper.last_posts_found,
         next_run_at=next_run,
+        status_message=status_message,
     )

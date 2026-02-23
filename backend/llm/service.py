@@ -5,8 +5,9 @@ import logging
 from pathlib import Path
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import selectinload
 
 from models.post import Post
 from models.reply import GeneratedReply
@@ -42,7 +43,9 @@ class LLMService:
 
     async def generate_replies(self, post_id: str) -> None:
         async with self.db_session_factory() as session:
-            result = await session.execute(select(Post).where(Post.id == post_id))
+            result = await session.execute(
+                select(Post).options(selectinload(Post.account)).where(Post.id == post_id)
+            )
             post = result.scalar_one_or_none()
             if post is None:
                 logger.error(f"Post {post_id} not found for reply generation")
@@ -79,7 +82,6 @@ class LLMService:
                 reply_texts = reply_texts[:num_replies]
 
                 # Delete any existing replies for this post (in case of regeneration)
-                from sqlalchemy import delete
                 await session.execute(delete(GeneratedReply).where(GeneratedReply.post_id == post.id))
 
                 for idx, text in enumerate(reply_texts, start=1):
