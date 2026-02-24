@@ -4,10 +4,12 @@ import { api } from '../api/client'
 import { ToastProvider, useToast } from '../components/Toast'
 
 const MODELS = [
-  { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
-  { value: 'openai/gpt-4o', label: 'GPT-4o' },
-  { value: 'anthropic/claude-haiku-3-5-20241022', label: 'Claude Haiku 3.5' },
+  { value: 'anthropic/claude-opus-4.6', label: 'Claude Opus 4.6' },
+  { value: 'anthropic/claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
+  { value: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5' },
   { value: 'openai/gpt-5.2', label: 'GPT-5.2' },
+  { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini' },
+  { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Meta Llama 3.3 70B Instruct (free)' },
 ]
 
 function SettingsInner() {
