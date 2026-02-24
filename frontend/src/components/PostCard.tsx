@@ -7,10 +7,13 @@ import ReplyList from './ReplyList'
 interface Props {
   post: Post
   focused: boolean
+  selected: boolean
+  selectionActive: boolean
   onUpdate: (post: Post) => void
+  onToggleSelect: (id: string) => void
 }
 
-const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, onUpdate }, ref) => {
+const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, selectionActive, onUpdate, onToggleSelect }, ref) => {
   const toast = useToast()
   const [expanded, setExpanded] = useState(true)
   const [imgOpen, setImgOpen] = useState<string | null>(null)
@@ -54,10 +57,12 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, onUpdate },
     <>
       <div
         ref={ref}
-        className={`relative rounded-xl transition-all duration-200 overflow-hidden ${
-          focused
-            ? 'ring-1 ring-cyan-glow/30 bg-deep shadow-lg shadow-cyan-glow/5'
-            : 'bg-abyss/80 hover:bg-deep/50 border border-slate-mid/30 hover:border-slate-mid/50'
+        className={`group relative rounded-xl transition-all duration-200 overflow-hidden ${
+          selected
+            ? 'ring-1 ring-cyan-glow/50 bg-cyan-glow/5'
+            : focused
+              ? 'ring-1 ring-cyan-glow/30 bg-deep shadow-lg shadow-cyan-glow/5'
+              : 'bg-abyss/80 hover:bg-deep/50 border border-slate-mid/30 hover:border-slate-mid/50'
         }`}
       >
         {/* Unread indicator - left edge glow */}
@@ -68,6 +73,21 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, onUpdate },
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-3.5 pb-1">
           <div className="flex items-center gap-2.5 min-w-0">
+            {/* Selection checkbox */}
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleSelect(post.id) }}
+              className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all ${
+                selected
+                  ? 'bg-cyan-glow border-cyan-glow text-void'
+                  : 'border-slate-mid/50 hover:border-fog/50 text-transparent'
+              } ${
+                selectionActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
             {/* Avatar */}
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-mid to-slate-dark flex items-center justify-center text-[11px] font-bold text-fog/80 uppercase shrink-0 ring-1 ring-slate-light/20">
               {post.account_username.slice(0, 2)}

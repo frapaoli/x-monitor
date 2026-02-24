@@ -96,6 +96,10 @@ export interface BulkResult {
   error: string | null;
 }
 
+export interface BulkPostUpdateResult {
+  updated_count: number;
+}
+
 // API functions
 export const api = {
   // Posts
@@ -107,6 +111,11 @@ export const api = {
     request<Post>(`/posts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   regenerateReplies: (id: string) =>
     request<Post>(`/posts/${id}/regenerate`, { method: 'POST' }),
+  bulkUpdatePosts: (postIds: string[], data: { is_read?: boolean; is_archived?: boolean }) =>
+    request<BulkPostUpdateResult>('/posts/bulk', {
+      method: 'PATCH',
+      body: JSON.stringify({ post_ids: postIds, ...data }),
+    }),
 
   // Accounts
   getAccounts: (params?: Record<string, string>) =>

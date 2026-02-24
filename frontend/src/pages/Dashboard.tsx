@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Post } from '../api/client'
 import { api } from '../api/client'
 import PostCard from '../components/PostCard'
+import BulkActionBar from '../components/BulkActionBar'
 import FilterSidebar, { type Filters } from '../components/FilterSidebar'
 import { ToastProvider, useToast } from '../components/Toast'
 
@@ -12,8 +13,12 @@ function DashboardInner() {
   const [loading, setLoading] = useState(true)
   const [focusIdx, setFocusIdx] = useState(-1)
   const [refreshing, setRefreshing] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
   const cardRefs = useRef<(HTMLDivElement | null)[]>([])
   const toast = useToast()
+
+  const selectionActive = selectedIds.size > 0
 
   const [filters, setFilters] = useState<Filters>({
     accountId: '',
@@ -58,21 +63,98 @@ function DashboardInner() {
 
   useEffect(() => {
     setPage(1)
+    setSelectedIds(new Set())
     fetchPosts(1)
   }, [fetchPosts])
 
   const handleRefresh = async () => {
     setRefreshing(true)
     setPage(1)
+    setSelectedIds(new Set())
     await fetchPosts(1)
     setRefreshing(false)
     setFocusIdx(-1)
   }
 
+  // Selection helpers
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(posts.map(p => p.id)))
+  }, [posts])
+
+  const deselectAll = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  // Bulk action handlers
+  const handleBulkMarkRead = useCallback(async () => {
+    if (bulkLoading) return
+    setBulkLoading(true)
+    try {
+      const ids = Array.from(selectedIds)
+      await api.bulkUpdatePosts(ids, { is_read: true })
+      setPosts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, is_read: true } : p))
+      toast(`Marked ${ids.length} as read`, 'success')
+      setSelectedIds(new Set())
+    } catch {
+      toast('Bulk update failed', 'error')
+    } finally {
+      setBulkLoading(false)
+    }
+  }, [selectedIds, bulkLoading, toast])
+
+  const handleBulkMarkUnread = useCallback(async () => {
+    if (bulkLoading) return
+    setBulkLoading(true)
+    try {
+      const ids = Array.from(selectedIds)
+      await api.bulkUpdatePosts(ids, { is_read: false })
+      setPosts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, is_read: false } : p))
+      toast(`Marked ${ids.length} as unread`, 'success')
+      setSelectedIds(new Set())
+    } catch {
+      toast('Bulk update failed', 'error')
+    } finally {
+      setBulkLoading(false)
+    }
+  }, [selectedIds, bulkLoading, toast])
+
+  const handleBulkArchive = useCallback(async () => {
+    if (bulkLoading) return
+    setBulkLoading(true)
+    try {
+      const ids = Array.from(selectedIds)
+      await api.bulkUpdatePosts(ids, { is_archived: true })
+      setPosts(prev => prev.filter(p => !selectedIds.has(p.id)))
+      setTotal(t => t - ids.length)
+      setFocusIdx(prev => Math.min(prev, posts.length - ids.length - 1))
+      toast(`Archived ${ids.length} posts`, 'success')
+      setSelectedIds(new Set())
+    } catch {
+      toast('Bulk archive failed', 'error')
+    } finally {
+      setBulkLoading(false)
+    }
+  }, [selectedIds, bulkLoading, posts.length, toast])
+
   const handlePostUpdate = (updated: Post) => {
     if (updated.is_archived) {
       setPosts(prev => prev.filter(p => p.id !== updated.id))
       setTotal(t => t - 1)
+      setSelectedIds(prev => {
+        if (!prev.has(updated.id)) return prev
+        const next = new Set(prev)
+        next.delete(updated.id)
+        return next
+      })
     } else {
       setPosts(prev => prev.map(p => p.id === updated.id ? updated : p))
     }
@@ -208,7 +290,10 @@ function DashboardInner() {
                   ref={el => { cardRefs.current[i] = el }}
                   post={post}
                   focused={i === focusIdx}
+                  selected={selectedIds.has(post.id)}
+                  selectionActive={selectionActive}
                   onUpdate={handlePostUpdate}
+                  onToggleSelect={toggleSelect}
                 />
               </div>
             ))}
@@ -275,6 +360,17 @@ function DashboardInner() {
           )}
         </div>
       </div>
+
+      <BulkActionBar
+        selectedCount={selectedIds.size}
+        totalCount={posts.length}
+        disabled={bulkLoading}
+        onSelectAll={selectAll}
+        onDeselectAll={deselectAll}
+        onMarkRead={handleBulkMarkRead}
+        onMarkUnread={handleBulkMarkUnread}
+        onArchive={handleBulkArchive}
+      />
     </div>
   )
 }

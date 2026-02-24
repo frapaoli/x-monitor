@@ -40,5 +40,15 @@ class PostListResponse(BaseModel):
     per_page: int
 
 
+class BulkPostUpdate(BaseModel):
+    post_ids: list[uuid.UUID]
+    is_read: bool | None = None
+    is_archived: bool | None = None
+
+
+class BulkPostUpdateResponse(BaseModel):
+    updated_count: int
+
+
 class UnreadCountResponse(BaseModel):
     count: int

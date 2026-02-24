@@ -2,7 +2,7 @@ import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -10,7 +10,7 @@ from database import get_db
 from models.account import MonitoredAccount
 from models.post import Post
 from models.reply import GeneratedReply
-from schemas.post import PostListResponse, PostResponse, PostUpdate, UnreadCountResponse
+from schemas.post import BulkPostUpdate, BulkPostUpdateResponse, PostListResponse, PostResponse, PostUpdate, UnreadCountResponse
 from schemas.reply import ReplyResponse
 
 router = APIRouter()
@@ -114,6 +114,31 @@ async def unread_count(db: AsyncSession = Depends(get_db)):
     )
     count = result.scalar() or 0
     return UnreadCountResponse(count=count)
+
+
+@router.patch("/bulk", response_model=BulkPostUpdateResponse)
+async def bulk_update_posts(
+    data: BulkPostUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    if not data.post_ids:
+        raise HTTPException(status_code=422, detail="post_ids must not be empty")
+    if len(data.post_ids) > 100:
+        raise HTTPException(status_code=422, detail="Maximum 100 post IDs per request")
+    if data.is_read is None and data.is_archived is None:
+        raise HTTPException(status_code=422, detail="At least one update field required")
+
+    values = {}
+    if data.is_read is not None:
+        values["is_read"] = data.is_read
+    if data.is_archived is not None:
+        values["is_archived"] = data.is_archived
+
+    result = await db.execute(
+        update(Post).where(Post.id.in_(data.post_ids)).values(**values)
+    )
+    await db.flush()
+    return BulkPostUpdateResponse(updated_count=result.rowcount)
 
 
 @router.get("/{post_id}", response_model=PostResponse)
