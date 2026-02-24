@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Account, BulkResult } from '../api/client'
 import { api } from '../api/client'
 import { ToastProvider, useToast } from '../components/Toast'
@@ -14,7 +14,20 @@ function AccountsInner() {
   const [bulkLoading, setBulkLoading] = useState(false)
   const [showBulk, setShowBulk] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const toast = useToast()
+
+  const activeCount = accounts.filter(a => a.is_active).length
+  const pausedCount = accounts.length - activeCount
+
+  const filteredAccounts = useMemo(() => {
+    if (!searchQuery) return accounts
+    const q = searchQuery.toLowerCase()
+    return accounts.filter(a =>
+      a.username.toLowerCase().includes(q) ||
+      (a.display_name && a.display_name.toLowerCase().includes(q))
+    )
+  }, [accounts, searchQuery])
 
   const fetchAccounts = async () => {
     setLoading(true)
@@ -91,7 +104,16 @@ function AccountsInner() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-lg font-bold text-ghost">Monitored Accounts</h1>
-          <p className="text-xs text-ash font-mono mt-1">{total} account{total !== 1 ? 's' : ''} tracked</p>
+          <p className="text-xs text-ash font-mono mt-1">
+            {total > 0 ? (
+              <>
+                <span className="text-emerald">{activeCount} active</span>
+                {pausedCount > 0 && <span className="text-steel ml-1.5">{pausedCount} paused</span>}
+              </>
+            ) : (
+              `${total} account${total !== 1 ? 's' : ''} tracked`
+            )}
+          </p>
         </div>
       </div>
 
@@ -181,6 +203,22 @@ function AccountsInner() {
         )}
       </div>
 
+      {/* Search filter */}
+      {accounts.length > 5 && (
+        <div className="mb-4 relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-steel pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Filter accounts..."
+            className="w-full bg-deep/80 border border-slate-mid/50 rounded-lg pl-9 pr-3 py-2.5 text-sm text-mist placeholder:text-steel/50 focus:outline-none focus:border-cyan-glow/40 transition-all font-mono"
+          />
+        </div>
+      )}
+
       {/* Account list */}
       <div className="rounded-xl overflow-hidden glass-card">
         <div className="overflow-x-auto">
@@ -223,7 +261,7 @@ function AccountsInner() {
                   </td>
                 </tr>
               )}
-              {accounts.map((account, i) => (
+              {filteredAccounts.map((account, i) => (
                 <tr
                   key={account.id}
                   className={`transition-colors hover:bg-slate-mid/8 ${i > 0 ? 'border-t border-slate-mid/15' : ''}`}
@@ -246,22 +284,27 @@ function AccountsInner() {
                     </div>
                   </td>
                   <td className="px-4 py-3.5 text-center">
-                    <button
-                      onClick={() => handleToggle(account)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 ${
-                        account.is_active
-                          ? 'bg-cyan-glow/25 shadow-sm shadow-cyan-glow/20'
-                          : 'bg-slate-mid/60'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-3.5 w-3.5 rounded-full transition-all duration-200 ${
+                    <div className="inline-flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggle(account)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 ${
                           account.is_active
-                            ? 'translate-x-4.5 bg-cyan-glow shadow-sm shadow-cyan-glow/40'
-                            : 'translate-x-1 bg-steel'
+                            ? 'bg-cyan-glow/25 shadow-sm shadow-cyan-glow/20'
+                            : 'bg-slate-mid/60'
                         }`}
-                      />
-                    </button>
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 rounded-full transition-all duration-200 ${
+                            account.is_active
+                              ? 'translate-x-4.5 bg-cyan-glow shadow-sm shadow-cyan-glow/40'
+                              : 'translate-x-1 bg-steel'
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-[10px] font-mono ${account.is_active ? 'text-emerald' : 'text-steel'}`}>
+                        {account.is_active ? 'On' : 'Off'}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3.5 hidden sm:table-cell">
                     <span className="text-xs font-mono text-ash tabular-nums">

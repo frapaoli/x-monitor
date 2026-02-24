@@ -1,4 +1,4 @@
-import { forwardRef, useState } from 'react'
+import { forwardRef, useEffect, useState } from 'react'
 import type { Post } from '../api/client'
 import { api } from '../api/client'
 import { useToast } from './Toast'
@@ -15,8 +15,8 @@ interface Props {
 
 const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, selectionActive, onUpdate, onToggleSelect }, ref) => {
   const toast = useToast()
-  const [expanded, setExpanded] = useState(true)
-  const [imgOpen, setImgOpen] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [imgIdx, setImgIdx] = useState<number | null>(null)
 
   const timeAgo = formatTimeAgo(post.posted_at)
 
@@ -81,7 +81,7 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, s
                   ? 'bg-cyan-glow border-cyan-glow text-void'
                   : 'border-slate-mid/50 hover:border-fog/50 text-transparent'
               } ${
-                selectionActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                selectionActive ? 'opacity-100' : 'opacity-60'
               }`}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -105,7 +105,7 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, s
             <span className={`font-mono text-[10px] font-semibold tracking-wider px-1.5 py-0.5 rounded ${postTypeStyle}`}>
               {postTypeLabel}
             </span>
-            <span className="text-[11px] text-ash font-mono tabular-nums">{timeAgo}</span>
+            <span className="text-[11px] text-ash font-mono tabular-nums" title={new Date(post.posted_at).toLocaleString()}>{timeAgo}</span>
             {!post.is_read && (
               <div className="w-1.5 h-1.5 rounded-full bg-cyan-glow unread-dot" />
             )}
@@ -130,7 +130,7 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, s
               {post.media_local_paths.map((path, i) => (
                 <button
                   key={i}
-                  onClick={() => setImgOpen(path)}
+                  onClick={() => setImgIdx(i)}
                   className={`relative overflow-hidden rounded-lg border border-slate-mid/30 hover:border-cyan-glow/20 transition-all group ${
                     post.media_local_paths!.length === 1 ? 'max-h-80' :
                     post.media_local_paths!.length === 3 && i === 0 ? 'row-span-2' : ''
@@ -220,26 +220,13 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, s
       </div>
 
       {/* Lightbox */}
-      {imgOpen && (
-        <div
-          className="fixed inset-0 z-[90] bg-void/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
-          onClick={() => setImgOpen(null)}
-        >
-          <button
-            onClick={() => setImgOpen(null)}
-            className="absolute top-4 right-4 p-2 text-fog hover:text-white transition-colors"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <img
-            src={`/media/${imgOpen.split('/data/media/')[1] || imgOpen}`}
-            alt="Full size"
-            className="max-w-full max-h-[90vh] rounded-xl shadow-2xl animate-fade-in-scale"
-            onClick={e => e.stopPropagation()}
-          />
-        </div>
+      {imgIdx !== null && post.media_local_paths && (
+        <Lightbox
+          paths={post.media_local_paths}
+          currentIdx={imgIdx}
+          onClose={() => setImgIdx(null)}
+          onNavigate={setImgIdx}
+        />
       )}
     </>
   )
@@ -247,6 +234,88 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, s
 
 PostCard.displayName = 'PostCard'
 export default PostCard
+
+function Lightbox({
+  paths,
+  currentIdx,
+  onClose,
+  onNavigate,
+}: {
+  paths: string[]
+  currentIdx: number
+  onClose: () => void
+  onNavigate: (idx: number) => void
+}) {
+  const total = paths.length
+  const path = paths[currentIdx]
+
+  const goPrev = () => onNavigate((currentIdx - 1 + total) % total)
+  const goNext = () => onNavigate((currentIdx + 1) % total)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft') goPrev()
+      else if (e.key === 'ArrowRight') goNext()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  })
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] bg-void/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 text-fog hover:text-white transition-colors z-10"
+      >
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      {/* Counter badge */}
+      {total > 1 && (
+        <span className="absolute top-4 left-1/2 -translate-x-1/2 text-xs font-mono text-fog bg-void/80 px-3 py-1 rounded-full border border-slate-mid/40">
+          {currentIdx + 1} / {total}
+        </span>
+      )}
+
+      {/* Left arrow */}
+      {total > 1 && (
+        <button
+          onClick={e => { e.stopPropagation(); goPrev() }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-void/60 text-fog hover:text-white hover:bg-void/80 transition-all z-10"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
+
+      {/* Right arrow */}
+      {total > 1 && (
+        <button
+          onClick={e => { e.stopPropagation(); goNext() }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-void/60 text-fog hover:text-white hover:bg-void/80 transition-all z-10"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
+
+      <img
+        src={`/media/${path.split('/data/media/')[1] || path}`}
+        alt="Full size"
+        className="max-w-full max-h-[90vh] rounded-xl shadow-2xl animate-fade-in-scale"
+        onClick={e => e.stopPropagation()}
+      />
+    </div>
+  )
+}
 
 function formatTimeAgo(dateStr: string): string {
   const now = Date.now()

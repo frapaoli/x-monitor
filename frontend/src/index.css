@@ -103,6 +103,16 @@ body::before {
   50% { opacity: 1; }
 }
 
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fade-backdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .animate-fade-in {
   animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -125,6 +135,14 @@ body::before {
 
 .animate-breathe {
   animation: breathe 3s ease-in-out infinite;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-backdrop {
+  animation: fade-backdrop 0.2s ease both;
 }
 
 /* Skeleton loading shimmer */

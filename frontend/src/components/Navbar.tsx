@@ -106,6 +106,10 @@ export default function Navbar() {
               <Kbd>O</Kbd>
               <span className="text-ash/60">open</span>
             </span>
+            <span className="flex items-center gap-1">
+              <Kbd>?</Kbd>
+              <span className="text-ash/60">help</span>
+            </span>
           </div>
         )}
       </div>

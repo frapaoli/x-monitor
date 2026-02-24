@@ -21,10 +21,9 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
     setLocalReplies(replies)
   }
 
-  const handleCopy = async (text: string, index: number, id: string) => {
+  const handleCopy = async (text: string, _index: number, id: string) => {
     await navigator.clipboard.writeText(text)
     setCopiedId(id)
-    toast(`Copied reply #${index}`, 'success')
     setTimeout(() => setCopiedId(null), 1500)
   }
 
@@ -183,15 +182,21 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </button>
-              <button
-                onClick={() => handleCopy(reply.reply_text, reply.reply_index, reply.id)}
-                className={`p-1.5 rounded-md transition-all ${
-                  copiedId === reply.id
-                    ? 'text-cyan-glow bg-cyan-glow/10'
-                    : 'text-steel/50 hover:text-cyan-glow hover:bg-cyan-glow/5'
-                }`}
-                title="Copy to clipboard"
-              >
+              <div className="relative">
+                {copiedId === reply.id && (
+                  <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] font-mono text-cyan-glow bg-deep border border-cyan-glow/30 px-1.5 py-0.5 rounded whitespace-nowrap animate-fade-in">
+                    Copied!
+                  </span>
+                )}
+                <button
+                  onClick={() => handleCopy(reply.reply_text, reply.reply_index, reply.id)}
+                  className={`p-1.5 rounded-md transition-all ${
+                    copiedId === reply.id
+                      ? 'text-cyan-glow bg-cyan-glow/10'
+                      : 'text-steel/50 hover:text-cyan-glow hover:bg-cyan-glow/5'
+                  }`}
+                  title="Copy to clipboard"
+                >
                 {copiedId === reply.id ? (
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -202,6 +207,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
                   </svg>
                 )}
               </button>
+              </div>
             </div>
           </div>
         ))}

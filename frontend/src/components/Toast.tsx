@@ -52,11 +52,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={addToast}>
       {children}
-      <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 pointer-events-none">
+      <div className="fixed top-16 right-5 z-[100] flex flex-col gap-2.5 pointer-events-none">
         {toasts.map(t => (
           <div
             key={t.id}
-            className={`animate-slide-in-up pointer-events-auto flex items-center gap-2.5 border text-sm font-mono px-4 py-2.5 rounded-xl backdrop-blur-xl shadow-2xl ${styles[t.type]}`}
+            className={`animate-slide-in-right pointer-events-auto flex items-center gap-2.5 border text-sm font-mono px-4 py-2.5 rounded-xl backdrop-blur-xl shadow-2xl ${styles[t.type]}`}
           >
             {icons[t.type]}
             <span>{t.message}</span>

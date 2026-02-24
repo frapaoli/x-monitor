@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { Post } from '../api/client'
 import { api } from '../api/client'
 import PostCard from '../components/PostCard'
@@ -9,23 +10,27 @@ import { ToastProvider, useToast } from '../components/Toast'
 function DashboardInner() {
   const [posts, setPosts] = useState<Post[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [focusIdx, setFocusIdx] = useState(-1)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [shortcutModalOpen, setShortcutModalOpen] = useState(false)
   const cardRefs = useRef<(HTMLDivElement | null)[]>([])
+  const pageRef = useRef(1)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const toast = useToast()
 
   const selectionActive = selectedIds.size > 0
 
   const [filters, setFilters] = useState<Filters>({
-    accountId: '',
+    accountIds: [],
     isRead: '',
-    postType: '',
     search: '',
   })
+
+  const hasActiveFilters = filters.accountIds.length > 0 || !!filters.isRead || !!filters.search
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -42,9 +47,8 @@ function DashboardInner() {
         per_page: '20',
         is_archived: 'false',
       }
-      if (filters.accountId) params.account_id = filters.accountId
+      if (filters.accountIds.length > 0) params.account_ids = filters.accountIds.join(',')
       if (filters.isRead) params.is_read = filters.isRead
-      if (filters.postType) params.post_type = filters.postType
       if (debouncedSearch) params.search = debouncedSearch
 
       const data = await api.getPosts(params)
@@ -54,27 +58,55 @@ function DashboardInner() {
         setPosts(prev => [...prev, ...data.posts])
       }
       setTotal(data.total)
-    } catch (e) {
+    } catch {
       toast('Failed to load posts', 'error')
     } finally {
       setLoading(false)
     }
-  }, [filters.accountId, filters.isRead, filters.postType, debouncedSearch, toast])
+  }, [JSON.stringify(filters.accountIds), filters.isRead, debouncedSearch, toast])
 
   useEffect(() => {
-    setPage(1)
+    pageRef.current = 1
     setSelectedIds(new Set())
     fetchPosts(1)
   }, [fetchPosts])
 
+  // Infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loading) {
+          const nextPage = pageRef.current + 1
+          pageRef.current = nextPage
+          fetchPosts(nextPage)
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [fetchPosts, loading])
+
   const handleRefresh = async () => {
     setRefreshing(true)
-    setPage(1)
+    pageRef.current = 1
     setSelectedIds(new Set())
     await fetchPosts(1)
     setRefreshing(false)
     setFocusIdx(-1)
   }
+
+  // Lock body scroll when drawer open
+  useEffect(() => {
+    if (drawerOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [drawerOpen])
 
   // Selection helpers
   const toggleSelect = useCallback((id: string) => {
@@ -160,12 +192,6 @@ function DashboardInner() {
     }
   }
 
-  const loadMore = () => {
-    const next = page + 1
-    setPage(next)
-    fetchPosts(next)
-  }
-
   // Keyboard navigation
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -213,6 +239,9 @@ function DashboardInner() {
             })
           }
           break
+        case '?':
+          setShortcutModalOpen(prev => !prev)
+          break
       }
     }
     window.addEventListener('keydown', handler)
@@ -247,19 +276,20 @@ function DashboardInner() {
         <div className="flex-1 min-w-0">
           {/* Feed header with refresh */}
           <div className="flex items-center justify-between mb-4">
-            {/* Mobile filters */}
+            {/* Mobile filter button */}
             <div className="lg:hidden">
-              <details className="group">
-                <summary className="cursor-pointer text-sm font-mono text-fog hover:text-ghost flex items-center gap-1.5 select-none">
-                  <svg className="w-4 h-4 text-ash group-open:rotate-90 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                  </svg>
-                  Filters
-                </summary>
-                <div className="mt-3 p-4 rounded-xl glass-card animate-fade-in">
-                  <FilterSidebar filters={filters} onChange={setFilters} />
-                </div>
-              </details>
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="text-sm font-mono text-fog hover:text-ghost flex items-center gap-1.5 select-none px-2.5 py-1.5 rounded-lg hover:bg-slate-mid/20 transition-all"
+              >
+                <svg className="w-4 h-4 text-ash" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filters
+                {hasActiveFilters && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow" />
+                )}
+              </button>
             </div>
 
             {/* Desktop: just show count */}
@@ -299,7 +329,7 @@ function DashboardInner() {
             ))}
           </div>
 
-          {/* Loading / Load more */}
+          {/* Loading skeleton (initial) */}
           {loading && posts.length === 0 && (
             <div className="space-y-3 py-4">
               {[0, 1, 2].map(i => (
@@ -321,6 +351,7 @@ function DashboardInner() {
             </div>
           )}
 
+          {/* Empty states */}
           {!loading && posts.length === 0 && (
             <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in">
               <div className="w-16 h-16 rounded-2xl bg-slate-mid/20 flex items-center justify-center mb-4">
@@ -328,25 +359,37 @@ function DashboardInner() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
                 </svg>
               </div>
-              <p className="text-fog font-medium text-sm">No posts found</p>
-              <p className="text-ash text-xs mt-1.5 max-w-[240px]">Try adjusting your filters or add accounts to start monitoring</p>
+              {!hasActiveFilters ? (
+                <>
+                  <p className="text-fog font-medium text-sm">Welcome to X Monitor</p>
+                  <p className="text-ash text-xs mt-1.5 max-w-[280px]">
+                    Start by adding accounts to monitor on the{' '}
+                    <Link to="/accounts" className="text-cyan-glow hover:text-cyan-bright transition-colors">
+                      Accounts page
+                    </Link>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-fog font-medium text-sm">No matching posts</p>
+                  <p className="text-ash text-xs mt-1.5 max-w-[240px]">No posts match your current filters</p>
+                  <button
+                    onClick={() => setFilters({ accountIds: [], isRead: '', search: '' })}
+                    className="mt-3 text-xs font-mono text-cyan-glow hover:text-cyan-bright px-3 py-1.5 rounded-lg border border-cyan-glow/20 hover:bg-cyan-glow/5 transition-all"
+                  >
+                    Clear Filters
+                  </button>
+                </>
+              )}
             </div>
           )}
 
+          {/* Infinite scroll sentinel */}
           {hasMore && !loading && (
-            <div className="flex justify-center py-8">
-              <button
-                onClick={loadMore}
-                className="group flex items-center gap-2 font-mono text-sm text-cyan-dim hover:text-cyan-glow px-6 py-2.5 rounded-xl border border-cyan-dim/20 hover:border-cyan-glow/30 hover:bg-cyan-glow/5 transition-all"
-              >
-                <span>Load more</span>
-                <span className="text-xs text-ash group-hover:text-cyan-dim tabular-nums">
-                  {posts.length}/{total}
-                </span>
-              </button>
-            </div>
+            <div ref={sentinelRef} className="h-1" />
           )}
 
+          {/* Loading indicator for more posts */}
           {loading && posts.length > 0 && (
             <div className="flex justify-center py-6">
               <div className="flex items-center gap-2">
@@ -360,6 +403,65 @@ function DashboardInner() {
           )}
         </div>
       </div>
+
+      {/* Mobile filter drawer */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-[80] lg:hidden">
+          <div className="absolute inset-0 bg-void/70 animate-fade-backdrop" onClick={() => setDrawerOpen(false)} />
+          <div className="absolute inset-y-0 left-0 w-72 bg-abyss border-r border-slate-mid/40 p-5 animate-slide-in-left overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <span className="text-sm font-mono font-semibold text-ghost">Filters</span>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="p-1.5 rounded-lg text-ash hover:text-fog hover:bg-slate-mid/20 transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <FilterSidebar filters={filters} onChange={f => { setFilters(f); }} />
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard shortcut modal */}
+      {shortcutModalOpen && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-void/80 backdrop-blur-sm animate-fade-backdrop"
+          onClick={() => setShortcutModalOpen(false)}
+        >
+          <div
+            className="bg-abyss border border-slate-mid/50 rounded-xl p-6 w-80 animate-fade-in-scale"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold text-ghost mb-4">Keyboard Shortcuts</h3>
+            <div className="space-y-2.5">
+              {[
+                ['J / K', 'Navigate posts'],
+                ['O', 'Open in X'],
+                ['R', 'Mark as read'],
+                ['A', 'Archive'],
+                ['C', 'Copy first reply'],
+                ['?', 'Toggle this modal'],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center justify-between">
+                  <span className="text-xs text-ash font-mono">{desc}</span>
+                  <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 text-[11px] rounded border border-slate-light/30 bg-slate-dark/80 text-fog font-mono px-1.5">
+                    {key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShortcutModalOpen(false)}
+              className="mt-5 w-full text-xs font-mono text-ash hover:text-fog py-2 rounded-lg hover:bg-slate-mid/20 transition-all"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <BulkActionBar
         selectedCount={selectedIds.size}

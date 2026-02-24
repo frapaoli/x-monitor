@@ -58,7 +58,7 @@ def _post_to_response(post: Post) -> PostResponse:
 async def list_posts(
     page: int = 1,
     per_page: int = 20,
-    account_id: uuid.UUID | None = None,
+    account_ids: str | None = Query(default=None, description="Comma-separated account UUIDs"),
     is_read: bool | None = None,
     is_archived: bool | None = Query(default=False),
     post_type: str | None = None,
@@ -71,9 +71,14 @@ async def list_posts(
     )
     count_query = select(func.count(Post.id))
 
-    if account_id is not None:
-        query = query.where(Post.account_id == account_id)
-        count_query = count_query.where(Post.account_id == account_id)
+    if account_ids:
+        try:
+            id_list = [uuid.UUID(aid.strip()) for aid in account_ids.split(",") if aid.strip()]
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID in account_ids")
+        if id_list:
+            query = query.where(Post.account_id.in_(id_list))
+            count_query = count_query.where(Post.account_id.in_(id_list))
 
     if is_read is not None:
         query = query.where(Post.is_read == is_read)
