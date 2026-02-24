@@ -77,7 +77,7 @@ FRONTEND_PID=$!
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  X Monitor v2 is running!${NC}"
+echo -e "${GREEN}  X Monitor is running!${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
 echo ""
 echo -e "  Frontend (dev):  ${CYAN}http://localhost:5173${NC}"
