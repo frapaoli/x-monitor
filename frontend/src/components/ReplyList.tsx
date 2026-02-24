@@ -14,15 +14,18 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
   const toast = useToast()
   const [regenerating, setRegenerating] = useState(false)
   const [localReplies, setLocalReplies] = useState<Reply[]>(replies)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // Sync with parent when replies prop changes
   if (replies !== localReplies && replies.length > 0 && replies[0]?.id !== localReplies[0]?.id) {
     setLocalReplies(replies)
   }
 
-  const handleCopy = async (text: string, index: number) => {
+  const handleCopy = async (text: string, index: number, id: string) => {
     await navigator.clipboard.writeText(text)
-    toast(`Copied reply #${index}`)
+    setCopiedId(id)
+    toast(`Copied reply #${index}`, 'success')
+    setTimeout(() => setCopiedId(null), 1500)
   }
 
   const handleFavorite = async (reply: Reply) => {
@@ -31,7 +34,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
       setLocalReplies(prev => prev.map(r => r.id === reply.id ? updated : r))
       onReplyUpdate?.(updated)
     } catch {
-      toast('Failed to update')
+      toast('Failed to update', 'error')
     }
   }
 
@@ -40,18 +43,28 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
       const updated = await api.updateReply(reply.id, { was_used: true })
       setLocalReplies(prev => prev.map(r => r.id === reply.id ? updated : r))
       onReplyUpdate?.(updated)
-      toast('Marked as used')
+      toast('Marked as used', 'success')
     } catch {
-      toast('Failed to update')
+      toast('Failed to update', 'error')
     }
   }
 
   if (postLlmStatus === 'processing') {
     return (
-      <div className="mt-3 p-4 border border-slate-mid rounded-lg bg-deep/50">
-        <div className="flex items-center gap-2 text-sm text-fog">
-          <Spinner />
-          <span className="font-mono">Generating replies...</span>
+      <div className="mt-3 rounded-lg bg-deep/60 border border-slate-mid/30 p-4">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Spinner />
+            <div className="absolute inset-0 blur-sm opacity-50"><Spinner /></div>
+          </div>
+          <div>
+            <span className="text-sm text-fog font-mono">Generating replies...</span>
+            <div className="mt-1.5 flex gap-1.5">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="h-1 w-8 rounded-full skeleton" style={{ animationDelay: `${i * 200}ms` }} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -59,13 +72,21 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
 
   if (postLlmStatus === 'failed') {
     return (
-      <div className="mt-3 p-4 border border-rose/30 rounded-lg bg-rose/5">
+      <div className="mt-3 rounded-lg bg-rose/5 border border-rose/20 p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-rose font-mono">Generation failed</span>
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-rose" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm text-rose font-mono">Generation failed</span>
+          </div>
           <button
             onClick={onRegenerate}
-            className="text-xs font-mono text-cyan-glow hover:text-cyan-bright px-2 py-1 rounded border border-cyan-glow/30 hover:bg-cyan-glow/10 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-mono text-cyan-glow hover:text-cyan-bright px-2.5 py-1.5 rounded-lg border border-cyan-glow/20 hover:bg-cyan-glow/8 transition-all"
           >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
             Retry
           </button>
         </div>
@@ -75,46 +96,73 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
 
   if (postLlmStatus === 'pending' || localReplies.length === 0) {
     return (
-      <div className="mt-3 p-4 border border-slate-mid rounded-lg bg-deep/50">
-        <span className="text-sm text-ash font-mono">Replies pending...</span>
+      <div className="mt-3 rounded-lg bg-deep/40 border border-slate-mid/20 p-4">
+        <div className="flex items-center gap-2 text-ash">
+          <svg className="w-3.5 h-3.5 animate-breathe" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm font-mono">Replies pending...</span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="mt-3 space-y-0">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-mono text-ash uppercase tracking-wider">
-          Replies ({localReplies.length})
-        </span>
+    <div className="mt-3">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2 px-1">
+        <div className="flex items-center gap-2">
+          <svg className="w-3.5 h-3.5 text-cyan-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+          <span className="text-[11px] font-mono text-ash tracking-wide">
+            {localReplies.length} replies
+          </span>
+        </div>
         <button
           onClick={async () => {
             setRegenerating(true)
             try { await onRegenerate() } finally { setRegenerating(false) }
           }}
           disabled={regenerating}
-          className="text-[11px] font-mono text-cyan-dim hover:text-cyan-glow transition-colors disabled:opacity-40"
+          className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-dim hover:text-cyan-glow transition-all disabled:opacity-40"
         >
+          <svg className={`w-3 h-3 ${regenerating ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
           {regenerating ? 'Regenerating...' : 'Regenerate'}
         </button>
       </div>
-      <div className="border border-slate-mid/70 rounded-lg overflow-hidden divide-y divide-slate-mid/40">
-        {localReplies.map((reply) => (
+
+      {/* Reply items */}
+      <div className="rounded-lg border border-slate-mid/40 overflow-hidden bg-deep/30">
+        {localReplies.map((reply, idx) => (
           <div
             key={reply.id}
-            className="group flex items-start gap-3 px-3 py-2.5 hover:bg-slate-mid/20 transition-colors"
+            className={`flex items-start gap-3 px-3.5 py-3 transition-colors hover:bg-slate-mid/10 ${
+              idx > 0 ? 'border-t border-slate-mid/20' : ''
+            } ${reply.was_used ? 'bg-emerald/3' : ''}`}
           >
-            <span className="font-mono text-[11px] text-ash w-5 pt-0.5 shrink-0 text-right">
-              {reply.reply_index}.
+            {/* Index */}
+            <span className={`font-mono text-[11px] w-5 pt-0.5 shrink-0 text-right tabular-nums ${
+              reply.is_favorite ? 'text-amber' : 'text-steel'
+            }`}>
+              {reply.reply_index}
             </span>
-            <p className="text-sm text-fog leading-relaxed flex-1 min-w-0">
+
+            {/* Reply text */}
+            <p className="text-sm text-fog leading-relaxed flex-1 min-w-0 whitespace-pre-wrap">
               {reply.reply_text}
             </p>
-            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+
+            {/* Actions — always visible, subtle */}
+            <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
               <button
                 onClick={() => handleFavorite(reply)}
-                className={`p-1 rounded transition-colors ${
-                  reply.is_favorite ? 'text-amber' : 'text-steel hover:text-amber'
+                className={`p-1.5 rounded-md transition-all ${
+                  reply.is_favorite
+                    ? 'text-amber bg-amber/10'
+                    : 'text-steel/50 hover:text-amber hover:bg-amber/5'
                 }`}
                 title="Favorite"
               >
@@ -124,8 +172,10 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
               </button>
               <button
                 onClick={() => handleUsed(reply)}
-                className={`p-1 rounded transition-colors ${
-                  reply.was_used ? 'text-emerald' : 'text-steel hover:text-emerald'
+                className={`p-1.5 rounded-md transition-all ${
+                  reply.was_used
+                    ? 'text-emerald bg-emerald/10'
+                    : 'text-steel/50 hover:text-emerald hover:bg-emerald/5'
                 }`}
                 title="Mark as used"
               >
@@ -134,13 +184,23 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
                 </svg>
               </button>
               <button
-                onClick={() => handleCopy(reply.reply_text, reply.reply_index)}
-                className="p-1 rounded text-steel hover:text-cyan-glow transition-colors"
+                onClick={() => handleCopy(reply.reply_text, reply.reply_index, reply.id)}
+                className={`p-1.5 rounded-md transition-all ${
+                  copiedId === reply.id
+                    ? 'text-cyan-glow bg-cyan-glow/10'
+                    : 'text-steel/50 hover:text-cyan-glow hover:bg-cyan-glow/5'
+                }`}
                 title="Copy to clipboard"
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+                {copiedId === reply.id ? (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                )}
               </button>
             </div>
           </div>
