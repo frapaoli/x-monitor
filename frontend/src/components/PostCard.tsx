@@ -20,62 +20,57 @@ export default function PostCard({ post }: Props) {
     setCurrentPost(updated)
   }
 
-  const postTypeLabel = {
-    tweet: 'POST',
-    retweet: 'RT',
-    quote: 'QT',
-    reply: 'RE',
-  }[currentPost.post_type] || currentPost.post_type.toUpperCase()
+  const postTypeConfig: Record<string, { label: string; style: string }> = {
+    tweet: { label: 'POST', style: 'text-accent bg-accent-soft' },
+    retweet: { label: 'RT', style: 'text-ok bg-ok-soft' },
+    quote: { label: 'QT', style: 'text-info bg-info-soft' },
+    reply: { label: 'RE', style: 'text-warn bg-warn-soft' },
+  }
 
-  const postTypeStyle = {
-    tweet: 'text-cyan-glow bg-cyan-glow/8',
-    retweet: 'text-emerald bg-emerald/8',
-    quote: 'text-violet bg-violet/8',
-    reply: 'text-amber bg-amber/8',
-  }[currentPost.post_type] || 'text-fog bg-fog/8'
+  const { label: postTypeLabel, style: postTypeStyle } =
+    postTypeConfig[currentPost.post_type] || { label: currentPost.post_type.toUpperCase(), style: 'text-fg-2 bg-hover' }
 
   const replyCount = currentPost.replies?.length || 0
 
   return (
     <>
-      <div className="group relative rounded-xl bg-abyss/80 hover:bg-deep/50 border border-slate-mid/30 hover:border-slate-mid/50 transition-all duration-200 overflow-hidden">
+      <div className="rounded-xl bg-card border border-edge hover:border-edge-2 transition-colors">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-3.5 pb-1">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {/* Avatar */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="flex items-center gap-3 min-w-0">
             {currentPost.account_profile_image_url && !imgError ? (
               <img
                 src={currentPost.account_profile_image_url}
                 alt={`@${currentPost.account_username}`}
-                className="w-9 h-9 rounded-full shrink-0 ring-1 ring-slate-light/20 object-cover"
+                className="w-9 h-9 rounded-full shrink-0 border border-edge-2 object-cover"
                 onError={() => setImgError(true)}
               />
             ) : (
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-mid to-slate-dark flex items-center justify-center text-[11px] font-bold text-fog/80 uppercase shrink-0 ring-1 ring-slate-light/20">
+              <div className="w-9 h-9 rounded-full bg-elevated flex items-center justify-center text-[11px] font-semibold text-fg-2 uppercase shrink-0 border border-edge-2">
                 {currentPost.account_username.slice(0, 2)}
               </div>
             )}
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[13px] font-semibold text-ghost truncate">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-fg truncate">
                   {currentPost.account_display_name || currentPost.account_username}
                 </span>
-                <span className="text-xs text-ash font-mono truncate">@{currentPost.account_username}</span>
+                <span className="text-xs text-fg-3 font-mono truncate">@{currentPost.account_username}</span>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 ml-3">
-            <span className={`font-mono text-[10px] font-semibold tracking-wider px-1.5 py-0.5 rounded ${postTypeStyle}`}>
+          <div className="flex items-center gap-2.5 shrink-0 ml-3">
+            <span className={`font-mono text-[10px] font-semibold tracking-wide px-2 py-0.5 rounded-md ${postTypeStyle}`}>
               {postTypeLabel}
             </span>
-            <span className="text-[11px] text-ash font-mono tabular-nums" title={new Date(currentPost.posted_at).toLocaleString()}>{timeAgo}</span>
+            <span className="text-[11px] text-fg-3 font-mono tabular-nums" title={new Date(currentPost.posted_at).toLocaleString()}>{timeAgo}</span>
           </div>
         </div>
 
         {/* Body */}
-        <div className="px-4 pb-3.5">
+        <div className="px-4 pb-4">
           {currentPost.text_content && (
-            <p className="text-[13.5px] leading-[1.65] text-mist/90 whitespace-pre-wrap mt-1">
+            <p className="text-[13.5px] leading-relaxed text-fg/85 whitespace-pre-wrap mt-1">
               {currentPost.text_content}
             </p>
           )}
@@ -84,14 +79,13 @@ export default function PostCard({ post }: Props) {
           {currentPost.has_media && currentPost.media_local_paths && currentPost.media_local_paths.length > 0 && (
             <div className={`mt-3 grid gap-1.5 ${
               currentPost.media_local_paths.length === 1 ? 'grid-cols-1' :
-              currentPost.media_local_paths.length === 2 ? 'grid-cols-2' :
               'grid-cols-2'
             }`}>
               {currentPost.media_local_paths.map((path, i) => (
                 <button
                   key={i}
                   onClick={() => setImgIdx(i)}
-                  className={`relative overflow-hidden rounded-lg border border-slate-mid/30 hover:border-cyan-glow/20 transition-all group ${
+                  className={`relative overflow-hidden rounded-lg border border-edge hover:border-edge-2 transition-all ${
                     currentPost.media_local_paths!.length === 1 ? 'max-h-80' :
                     currentPost.media_local_paths!.length === 3 && i === 0 ? 'row-span-2' : ''
                   }`}
@@ -99,22 +93,21 @@ export default function PostCard({ post }: Props) {
                   <img
                     src={`/media/${path.split('/data/media/')[1] || path}`}
                     alt={`Post media ${i + 1}`}
-                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                    className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-300"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-void/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
               ))}
             </div>
           )}
 
-          {/* Actions bar */}
-          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+          {/* Actions */}
+          <div className="mt-3 flex items-center gap-1 flex-wrap">
             <a
               href={currentPost.post_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-mono text-cyan-dim hover:text-cyan-glow transition-all px-2.5 py-1.5 rounded-lg hover:bg-cyan-glow/5"
+              className="inline-flex items-center gap-1.5 text-xs text-fg-3 hover:text-fg-2 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-hover"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -122,11 +115,10 @@ export default function PostCard({ post }: Props) {
               Open
             </a>
 
-            {/* Reply toggle — right aligned */}
             <button
               onClick={() => setExpanded(!expanded)}
-              className={`ml-auto inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1.5 rounded-lg transition-all ${
-                expanded ? 'text-cyan-dim' : 'text-ash hover:text-fog'
+              className={`ml-auto inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
+                expanded ? 'text-accent bg-accent-soft' : 'text-fg-3 hover:text-fg-2 hover:bg-hover'
               }`}
             >
               <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -179,12 +171,12 @@ function Lightbox({
 
   return (
     <div
-      className="fixed inset-0 z-[90] bg-void/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+      className="fixed inset-0 z-[90] bg-base/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
       onClick={onClose}
     >
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 p-2 text-fog hover:text-white transition-colors z-10"
+        className="absolute top-4 right-4 p-2 text-fg-2 hover:text-fg transition-colors z-10 rounded-lg hover:bg-hover"
       >
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -192,7 +184,7 @@ function Lightbox({
       </button>
 
       {total > 1 && (
-        <span className="absolute top-4 left-1/2 -translate-x-1/2 text-xs font-mono text-fog bg-void/80 px-3 py-1 rounded-full border border-slate-mid/40">
+        <span className="absolute top-4 left-1/2 -translate-x-1/2 text-xs font-mono text-fg-2 bg-card px-3 py-1 rounded-full border border-edge">
           {currentIdx + 1} / {total}
         </span>
       )}
@@ -200,7 +192,7 @@ function Lightbox({
       {total > 1 && (
         <button
           onClick={e => { e.stopPropagation(); goPrev() }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-void/60 text-fog hover:text-white hover:bg-void/80 transition-all z-10"
+          className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-card text-fg-2 hover:text-fg hover:bg-elevated transition-colors z-10 border border-edge"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -211,7 +203,7 @@ function Lightbox({
       {total > 1 && (
         <button
           onClick={e => { e.stopPropagation(); goNext() }}
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-void/60 text-fog hover:text-white hover:bg-void/80 transition-all z-10"
+          className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-card text-fg-2 hover:text-fg hover:bg-elevated transition-colors z-10 border border-edge"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

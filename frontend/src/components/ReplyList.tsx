@@ -16,7 +16,6 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
   const [localReplies, setLocalReplies] = useState<Reply[]>(replies)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // Sync with parent when replies prop changes
   if (replies !== localReplies && replies.length > 0 && replies[0]?.id !== localReplies[0]?.id) {
     setLocalReplies(replies)
   }
@@ -50,15 +49,12 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
 
   if (postLlmStatus === 'processing') {
     return (
-      <div className="mt-3 rounded-lg bg-deep/60 border border-slate-mid/30 p-4">
+      <div className="mt-3 rounded-lg bg-elevated/50 border border-edge p-4">
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <Spinner />
-            <div className="absolute inset-0 blur-sm opacity-50"><Spinner /></div>
-          </div>
+          <Spinner />
           <div>
-            <span className="text-sm text-fog font-mono">Generating replies...</span>
-            <div className="mt-1.5 flex gap-1.5">
+            <span className="text-sm text-fg-2">Generating replies...</span>
+            <div className="mt-2 flex gap-1.5">
               {[0, 1, 2].map(i => (
                 <div key={i} className="h-1 w-8 rounded-full skeleton" style={{ animationDelay: `${i * 200}ms` }} />
               ))}
@@ -71,17 +67,17 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
 
   if (postLlmStatus === 'failed') {
     return (
-      <div className="mt-3 rounded-lg bg-rose/5 border border-rose/20 p-4">
+      <div className="mt-3 rounded-lg bg-err-soft border border-err/15 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-rose" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4 text-err" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span className="text-sm text-rose font-mono">Generation failed</span>
+            <span className="text-sm text-err">Generation failed</span>
           </div>
           <button
             onClick={onRegenerate}
-            className="flex items-center gap-1.5 text-xs font-mono text-cyan-glow hover:text-cyan-bright px-2.5 py-1.5 rounded-lg border border-cyan-glow/20 hover:bg-cyan-glow/8 transition-all"
+            className="flex items-center gap-1.5 text-xs font-medium text-accent hover:text-accent-2 px-3 py-1.5 rounded-lg border border-accent/20 hover:bg-accent-soft transition-colors"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -95,12 +91,12 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
 
   if (postLlmStatus === 'pending' || localReplies.length === 0) {
     return (
-      <div className="mt-3 rounded-lg bg-deep/40 border border-slate-mid/20 p-4">
-        <div className="flex items-center gap-2 text-ash">
-          <svg className="w-3.5 h-3.5 animate-breathe" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="mt-3 rounded-lg bg-elevated/30 border border-edge p-4">
+        <div className="flex items-center gap-2 text-fg-3">
+          <svg className="w-3.5 h-3.5 animate-pulse-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="text-sm font-mono">Replies pending...</span>
+          <span className="text-sm">Replies pending...</span>
         </div>
       </div>
     )
@@ -111,10 +107,10 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
       {/* Header */}
       <div className="flex items-center justify-between mb-2 px-1">
         <div className="flex items-center gap-2">
-          <svg className="w-3.5 h-3.5 text-cyan-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-3.5 h-3.5 text-fg-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
-          <span className="text-[11px] font-mono text-ash tracking-wide">
+          <span className="text-xs text-fg-3">
             {localReplies.length} replies
           </span>
         </div>
@@ -124,7 +120,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
             try { await onRegenerate() } finally { setRegenerating(false) }
           }}
           disabled={regenerating}
-          className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-dim hover:text-cyan-glow transition-all disabled:opacity-40"
+          className="flex items-center gap-1.5 text-xs text-fg-3 hover:text-accent transition-colors disabled:opacity-40"
         >
           <svg className={`w-3 h-3 ${regenerating ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -134,34 +130,34 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
       </div>
 
       {/* Reply items */}
-      <div className="rounded-lg border border-slate-mid/40 overflow-hidden bg-deep/30">
+      <div className="rounded-lg border border-edge overflow-hidden bg-card/50">
         {localReplies.map((reply, idx) => (
           <div
             key={reply.id}
-            className={`flex items-start gap-3 px-3.5 py-3 transition-colors hover:bg-slate-mid/10 ${
-              idx > 0 ? 'border-t border-slate-mid/20' : ''
-            } ${reply.was_used ? 'bg-emerald/3' : ''}`}
+            className={`flex items-start gap-3 px-3.5 py-3 transition-colors hover:bg-hover/50 ${
+              idx > 0 ? 'border-t border-edge' : ''
+            } ${reply.was_used ? 'bg-ok-soft/30' : ''}`}
           >
             {/* Index */}
             <span className={`font-mono text-[11px] w-5 pt-0.5 shrink-0 text-right tabular-nums ${
-              reply.is_favorite ? 'text-amber' : 'text-steel'
+              reply.is_favorite ? 'text-warn' : 'text-fg-4'
             }`}>
               {reply.reply_index}
             </span>
 
             {/* Reply text */}
-            <p className="text-sm text-fog leading-relaxed flex-1 min-w-0 whitespace-pre-wrap">
+            <p className="text-sm text-fg-2 leading-relaxed flex-1 min-w-0 whitespace-pre-wrap">
               {reply.reply_text}
             </p>
 
-            {/* Actions — always visible, subtle */}
+            {/* Actions */}
             <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
               <button
                 onClick={() => handleFavorite(reply)}
-                className={`p-1.5 rounded-md transition-all ${
+                className={`p-1.5 rounded-md transition-colors ${
                   reply.is_favorite
-                    ? 'text-amber bg-amber/10'
-                    : 'text-steel/50 hover:text-amber hover:bg-amber/5'
+                    ? 'text-warn bg-warn-soft'
+                    : 'text-fg-4 hover:text-warn hover:bg-warn-soft/50'
                 }`}
                 title="Favorite"
               >
@@ -171,10 +167,10 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
               </button>
               <button
                 onClick={() => handleUsed(reply)}
-                className={`p-1.5 rounded-md transition-all ${
+                className={`p-1.5 rounded-md transition-colors ${
                   reply.was_used
-                    ? 'text-emerald bg-emerald/10'
-                    : 'text-steel/50 hover:text-emerald hover:bg-emerald/5'
+                    ? 'text-ok bg-ok-soft'
+                    : 'text-fg-4 hover:text-ok hover:bg-ok-soft/50'
                 }`}
                 title="Mark as used"
               >
@@ -184,29 +180,29 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
               </button>
               <div className="relative">
                 {copiedId === reply.id && (
-                  <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] font-mono text-cyan-glow bg-deep border border-cyan-glow/30 px-1.5 py-0.5 rounded whitespace-nowrap animate-fade-in">
+                  <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] font-mono text-accent bg-card border border-accent/20 px-1.5 py-0.5 rounded whitespace-nowrap animate-fade-in">
                     Copied!
                   </span>
                 )}
                 <button
                   onClick={() => handleCopy(reply.reply_text, reply.reply_index, reply.id)}
-                  className={`p-1.5 rounded-md transition-all ${
+                  className={`p-1.5 rounded-md transition-colors ${
                     copiedId === reply.id
-                      ? 'text-cyan-glow bg-cyan-glow/10'
-                      : 'text-steel/50 hover:text-cyan-glow hover:bg-cyan-glow/5'
+                      ? 'text-accent bg-accent-soft'
+                      : 'text-fg-4 hover:text-accent hover:bg-accent-soft/50'
                   }`}
                   title="Copy to clipboard"
                 >
-                {copiedId === reply.id ? (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                )}
-              </button>
+                  {copiedId === reply.id ? (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -218,7 +214,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
 
 function Spinner() {
   return (
-    <svg className="animate-spin h-4 w-4 text-cyan-glow" fill="none" viewBox="0 0 24 24">
+    <svg className="animate-spin h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>

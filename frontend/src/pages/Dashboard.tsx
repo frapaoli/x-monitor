@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 import type { Account, RetrievalBatch, RetrievalBatchDetail } from '../api/client'
 import { api } from '../api/client'
 import PostCard from '../components/PostCard'
-import { ToastProvider, useToast } from '../components/Toast'
+import { useToast } from '../components/Toast'
 
-function DashboardInner() {
+export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
   const [sinceDt, setSinceDt] = useState('')
@@ -26,12 +26,10 @@ function DashboardInner() {
   const pageRef = useRef(1)
   const toast = useToast()
 
-  // Load accounts
   useEffect(() => {
     api.getAccounts({ per_page: '200' }).then(r => setAccounts(r.accounts)).catch(() => {})
   }, [])
 
-  // Load defaults
   useEffect(() => {
     api.getRetrievalDefaults().then(d => {
       setSinceDt(toLocalDatetime(d.since_dt))
@@ -44,7 +42,6 @@ function DashboardInner() {
     })
   }, [])
 
-  // Load batches
   const fetchBatches = useCallback(async (page: number) => {
     setBatchesLoading(true)
     try {
@@ -67,7 +64,6 @@ function DashboardInner() {
     fetchBatches(1)
   }, [fetchBatches])
 
-  // Infinite scroll for batches
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
@@ -85,7 +81,6 @@ function DashboardInner() {
     return () => observer.disconnect()
   }, [fetchBatches, batchesLoading, batches.length, batchesTotal])
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -96,7 +91,6 @@ function DashboardInner() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Cleanup poll timer
   useEffect(() => {
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
@@ -129,18 +123,15 @@ function DashboardInner() {
       const batch = await api.createRetrieval(payload)
       toast('Retrieval started', 'success')
 
-      // Add to top of list
       setBatches(prev => [batch, ...prev])
       setBatchesTotal(t => t + 1)
 
-      // Auto-expand and poll for completion
       setExpandedBatchId(batch.id)
       setExpandedDetail(null)
 
       const pollStatus = async () => {
         try {
           const detail = await api.getRetrieval(batch.id)
-          // Update batch in list
           setBatches(prev => prev.map(b => b.id === batch.id ? {
             ...b,
             status: detail.status,
@@ -153,7 +144,6 @@ function DashboardInner() {
               pollTimerRef.current = null
             }
             setExpandedDetail(detail)
-            // Update defaults for next retrieval
             if (untilDt) setSinceDt(untilDt)
             setUntilDt(toLocalDatetime(new Date().toISOString()))
           }
@@ -191,30 +181,36 @@ function DashboardInner() {
   const hasMore = batches.length < batchesTotal
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+    <div className="p-4 sm:p-6 md:p-8 max-w-4xl animate-fade-in">
+      {/* Page header */}
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-fg">Feed</h1>
+        <p className="text-sm text-fg-2 mt-1">Monitor and retrieve posts from tracked accounts</p>
+      </div>
+
       {/* New Retrieval Panel */}
-      <div className="rounded-xl glass-card p-5 mb-6">
-        <h2 className="text-xs font-semibold text-ghost uppercase tracking-widest font-mono mb-4">New Retrieval</h2>
+      <div className="rounded-xl bg-card border border-edge p-5 mb-8">
+        <h2 className="text-sm font-medium text-fg mb-4">New Retrieval</h2>
 
         {/* Account picker */}
         <div className="mb-4">
-          <label className="block text-[10px] font-mono text-ash/80 uppercase tracking-widest mb-1.5">
+          <label className="block text-xs font-medium text-fg-2 mb-1.5">
             Accounts
           </label>
           <div ref={dropdownRef} className="relative">
             <button
               type="button"
               onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-              className="w-full bg-deep/80 border border-slate-mid/60 rounded-lg px-3 py-2 text-sm text-left font-mono transition-all hover:border-slate-light/50 focus:outline-none focus:border-cyan-glow/40 flex items-center gap-2 min-h-[38px]"
+              className="w-full bg-surface border border-edge-2 rounded-lg px-3 py-2.5 text-sm text-left transition-colors hover:border-edge-3 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 flex items-center gap-2 min-h-[42px]"
             >
               {selectedAccounts.length === 0 ? (
-                <span className="text-steel/60">Select accounts...</span>
+                <span className="text-fg-3">Select accounts...</span>
               ) : (
-                <span className="flex flex-wrap gap-1 flex-1 min-w-0">
+                <span className="flex flex-wrap gap-1.5 flex-1 min-w-0">
                   {selectedAccounts.map(a => (
                     <span
                       key={a.id}
-                      className="inline-flex items-center gap-1 bg-cyan-glow/10 text-cyan-glow text-[11px] px-1.5 py-0.5 rounded"
+                      className="inline-flex items-center gap-1 bg-accent-soft text-accent text-xs px-2 py-0.5 rounded-md font-medium"
                     >
                       @{a.username}
                       <svg
@@ -231,13 +227,13 @@ function DashboardInner() {
                   ))}
                 </span>
               )}
-              <svg className={`w-3.5 h-3.5 text-steel shrink-0 transition-transform ${accountDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className={`w-4 h-4 text-fg-3 shrink-0 transition-transform ${accountDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             {accountDropdownOpen && (
-              <div className="absolute z-20 mt-1 w-full rounded-lg bg-deep border border-slate-mid/60 shadow-xl max-h-52 overflow-y-auto animate-fade-in">
+              <div className="absolute z-20 mt-1 w-full rounded-lg bg-card border border-edge-2 shadow-xl shadow-base/60 max-h-52 overflow-y-auto animate-fade-in">
                 <button
                   onClick={() => {
                     if (selectedAccountIds.length === accounts.length) {
@@ -246,7 +242,7 @@ function DashboardInner() {
                       selectAllAccounts()
                     }
                   }}
-                  className="w-full text-left text-[11px] font-mono text-ash hover:text-fog hover:bg-slate-mid/20 px-3 py-2 border-b border-slate-mid/30 transition-colors"
+                  className="w-full text-left text-xs text-fg-2 hover:text-fg hover:bg-hover px-3 py-2 border-b border-edge transition-colors font-medium"
                 >
                   {selectedAccountIds.length === accounts.length ? 'Deselect all' : 'Select all'}
                 </button>
@@ -256,12 +252,12 @@ function DashboardInner() {
                     <button
                       key={a.id}
                       onClick={() => toggleAccount(a.id)}
-                      className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm font-mono transition-colors ${
-                        isSelected ? 'text-cyan-glow bg-cyan-glow/5' : 'text-fog hover:bg-slate-mid/20'
+                      className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 text-sm transition-colors ${
+                        isSelected ? 'text-accent bg-accent-soft' : 'text-fg-2 hover:bg-hover'
                       }`}
                     >
-                      <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                        isSelected ? 'bg-cyan-glow border-cyan-glow text-void' : 'border-slate-mid/60'
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                        isSelected ? 'bg-accent border-accent text-white' : 'border-edge-3'
                       }`}>
                         {isSelected && (
                           <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -269,13 +265,13 @@ function DashboardInner() {
                           </svg>
                         )}
                       </span>
-                      @{a.username}
+                      <span className="font-mono text-[13px]">@{a.username}</span>
                     </button>
                   )
                 })}
                 {accounts.length === 0 && (
-                  <div className="px-3 py-3 text-xs font-mono text-steel text-center">
-                    No accounts — <Link to="/accounts" className="text-cyan-glow">add some</Link>
+                  <div className="px-3 py-4 text-sm text-fg-3 text-center">
+                    No accounts yet. <Link to="/accounts" className="text-accent hover:text-accent-2">Add some</Link>
                   </div>
                 )}
               </div>
@@ -284,27 +280,23 @@ function DashboardInner() {
         </div>
 
         {/* Time range */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
           <div>
-            <label className="block text-[10px] font-mono text-ash/80 uppercase tracking-widest mb-1.5">
-              Since
-            </label>
+            <label className="block text-xs font-medium text-fg-2 mb-1.5">Since</label>
             <input
               type="datetime-local"
               value={sinceDt}
               onChange={e => setSinceDt(e.target.value)}
-              className="w-full bg-deep/80 border border-slate-mid/50 rounded-lg px-3 py-2.5 text-sm text-mist focus:outline-none focus:border-cyan-glow/40 transition-all font-mono"
+              className="w-full bg-surface border border-edge-2 rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors font-mono"
             />
           </div>
           <div>
-            <label className="block text-[10px] font-mono text-ash/80 uppercase tracking-widest mb-1.5">
-              Until
-            </label>
+            <label className="block text-xs font-medium text-fg-2 mb-1.5">Until</label>
             <input
               type="datetime-local"
               value={untilDt}
               onChange={e => setUntilDt(e.target.value)}
-              className="w-full bg-deep/80 border border-slate-mid/50 rounded-lg px-3 py-2.5 text-sm text-mist focus:outline-none focus:border-cyan-glow/40 transition-all font-mono"
+              className="w-full bg-surface border border-edge-2 rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors font-mono"
             />
           </div>
         </div>
@@ -313,7 +305,7 @@ function DashboardInner() {
         <button
           onClick={handleFetch}
           disabled={fetching || selectedAccountIds.length === 0}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-glow/10 border border-cyan-glow/25 text-cyan-glow text-sm font-mono font-medium hover:bg-cyan-glow/15 hover:border-cyan-glow/40 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-2 text-white text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
           {fetching ? (
             <>
@@ -334,11 +326,11 @@ function DashboardInner() {
         </button>
       </div>
 
-      {/* Batch list */}
+      {/* Retrieval history */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xs font-semibold text-ghost uppercase tracking-widest font-mono">Retrieval History</h2>
-          <span className="text-[11px] font-mono text-ash tabular-nums">{batchesTotal} total</span>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-medium text-fg">Retrieval History</h2>
+          <span className="text-xs text-fg-3 font-mono tabular-nums">{batchesTotal} total</span>
         </div>
 
         {batches.map(batch => (
@@ -357,7 +349,7 @@ function DashboardInner() {
         {batchesLoading && batches.length === 0 && (
           <div className="space-y-3">
             {[0, 1, 2].map(i => (
-              <div key={i} className="rounded-xl bg-abyss/80 border border-slate-mid/20 p-4 animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
+              <div key={i} className="rounded-xl bg-card border border-edge p-4 animate-fade-in" style={{ animationDelay: `${i * 80}ms` }}>
                 <div className="flex items-center gap-3">
                   <div className="h-3 w-32 skeleton" />
                   <div className="h-3 w-20 skeleton" />
@@ -371,14 +363,14 @@ function DashboardInner() {
         {/* Empty state */}
         {!batchesLoading && batches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-            <div className="w-14 h-14 rounded-2xl bg-slate-mid/20 flex items-center justify-center mb-4">
-              <svg className="w-7 h-7 text-steel" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div className="w-14 h-14 rounded-2xl bg-elevated flex items-center justify-center mb-4">
+              <svg className="w-7 h-7 text-fg-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
               </svg>
             </div>
-            <p className="text-fog font-medium text-sm">No retrievals yet</p>
-            <p className="text-ash text-xs mt-1.5 max-w-[280px]">
-              Select accounts above and click Fetch to retrieve posts
+            <p className="text-fg font-medium text-sm">No retrievals yet</p>
+            <p className="text-fg-3 text-xs mt-1.5 max-w-[280px]">
+              Select accounts above and fetch posts to get started
             </p>
           </div>
         )}
@@ -392,11 +384,11 @@ function DashboardInner() {
         {batchesLoading && batches.length > 0 && (
           <div className="flex justify-center py-4">
             <div className="flex items-center gap-2">
-              <svg className="animate-spin h-4 w-4 text-cyan-glow" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <span className="text-xs font-mono text-ash">Loading more...</span>
+              <span className="text-xs text-fg-3">Loading more...</span>
             </div>
           </div>
         )}
@@ -418,11 +410,11 @@ function BatchCard({
   detailLoading: boolean
   onToggle: () => void
 }) {
-  const statusColor = {
-    running: 'text-amber bg-amber/10 border-amber/20',
-    completed: 'text-emerald bg-emerald/10 border-emerald/20',
-    failed: 'text-rose bg-rose/10 border-rose/20',
-  }[batch.status] || 'text-ash bg-ash/10 border-ash/20'
+  const statusStyle = {
+    running: 'text-warn bg-warn-soft border-warn/15',
+    completed: 'text-ok bg-ok-soft border-ok/15',
+    failed: 'text-err bg-err-soft border-err/15',
+  }[batch.status] || 'text-fg-2 bg-hover border-edge'
 
   const statusIcon = {
     running: (
@@ -446,72 +438,64 @@ function BatchCard({
   return (
     <div className={`rounded-xl transition-all ${
       isExpanded
-        ? 'bg-deep/80 border border-cyan-glow/20 shadow-lg shadow-cyan-glow/5'
-        : 'bg-abyss/80 border border-slate-mid/30 hover:border-slate-mid/50'
+        ? 'bg-card border border-accent/15 shadow-lg shadow-accent/5'
+        : 'bg-card border border-edge hover:border-edge-2'
     }`}>
-      {/* Header — clickable */}
       <button
         onClick={onToggle}
         className="w-full text-left px-4 py-3.5 flex items-center gap-3"
       >
-        {/* Expand arrow */}
-        <svg className={`w-3.5 h-3.5 text-ash shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className={`w-3.5 h-3.5 text-fg-3 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
 
-        {/* Timestamp */}
-        <span className="text-[12px] font-mono text-fog tabular-nums whitespace-nowrap">
+        <span className="text-xs font-mono text-fg-2 tabular-nums whitespace-nowrap">
           {new Date(batch.created_at).toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
           })}
         </span>
 
-        {/* Time range */}
-        <span className="text-[11px] font-mono text-ash truncate hidden sm:inline">
+        <span className="text-xs text-fg-3 truncate hidden sm:inline">
           {batch.since_dt ? formatDateShort(batch.since_dt) : '...'} — {batch.until_dt ? formatDateShort(batch.until_dt) : 'now'}
         </span>
 
-        {/* Account chips */}
         <span className="flex items-center gap-1 ml-auto shrink-0">
           {batch.accounts.slice(0, 3).map(a => (
-            <span key={a.id} className="text-[10px] font-mono text-ash bg-slate-mid/20 px-1.5 py-0.5 rounded">
+            <span key={a.id} className="text-[10px] font-mono text-fg-3 bg-hover px-1.5 py-0.5 rounded">
               @{a.username}
             </span>
           ))}
           {batch.accounts.length > 3 && (
-            <span className="text-[10px] font-mono text-ash">+{batch.accounts.length - 3}</span>
+            <span className="text-[10px] text-fg-3">+{batch.accounts.length - 3}</span>
           )}
         </span>
 
-        {/* Post count */}
-        <span className="text-[11px] font-mono text-fog tabular-nums whitespace-nowrap">
+        <span className="text-xs text-fg-2 font-mono tabular-nums whitespace-nowrap">
           {batch.post_count} post{batch.post_count !== 1 ? 's' : ''}
         </span>
 
-        {/* Status badge */}
-        <span className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold tracking-wide px-2 py-0.5 rounded-full border ${statusColor}`}>
+        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold tracking-wide px-2 py-0.5 rounded-full border ${statusStyle}`}>
           {statusIcon}
           {batch.status}
         </span>
       </button>
 
-      {/* Expanded content */}
       {isExpanded && (
-        <div className="px-4 pb-4 border-t border-slate-mid/20">
+        <div className="px-4 pb-4 border-t border-edge">
           {batch.error_message && (
-            <div className="mt-3 rounded-lg bg-rose/5 border border-rose/15 px-3 py-2">
-              <p className="text-[11px] font-mono text-rose/80">{batch.error_message}</p>
+            <div className="mt-3 rounded-lg bg-err-soft border border-err/15 px-3 py-2">
+              <p className="text-xs text-err/80">{batch.error_message}</p>
             </div>
           )}
 
           {detailLoading && (
             <div className="py-8 flex justify-center">
               <div className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4 text-cyan-glow" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <span className="text-xs font-mono text-ash">Loading posts...</span>
+                <span className="text-xs text-fg-3">Loading posts...</span>
               </div>
             </div>
           )}
@@ -519,18 +503,18 @@ function BatchCard({
           {batch.status === 'running' && !detail && !detailLoading && (
             <div className="py-8 flex justify-center">
               <div className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4 text-amber" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-4 w-4 text-warn" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <span className="text-xs font-mono text-amber/80">Retrieval in progress...</span>
+                <span className="text-xs text-warn/80">Retrieval in progress...</span>
               </div>
             </div>
           )}
 
           {detail && detail.posts.length === 0 && batch.status === 'completed' && (
             <div className="py-6 text-center">
-              <p className="text-xs font-mono text-ash">No posts found in this time range</p>
+              <p className="text-xs text-fg-3">No posts found in this time range</p>
             </div>
           )}
 
@@ -557,12 +541,4 @@ function formatDateShort(isoStr: string): string {
   return new Date(isoStr).toLocaleString(undefined, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   })
-}
-
-export default function Dashboard() {
-  return (
-    <ToastProvider>
-      <DashboardInner />
-    </ToastProvider>
-  )
 }
