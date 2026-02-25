@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     database_url: str = ""
 
     openrouter_api_key: str = ""
-    polling_interval_minutes: int = 30
     x_api_key: str = ""
     llm_model: str = "anthropic/claude-sonnet-4-20250514"
     replies_per_post: int = 10

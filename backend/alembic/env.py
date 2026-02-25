@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from config import settings as app_settings
 from database import Base
-from models import MonitoredAccount, Post, GeneratedReply, AppSetting  # noqa: F401
+from models import MonitoredAccount, RetrievalBatch, Post, GeneratedReply, AppSetting  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

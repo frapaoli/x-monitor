@@ -28,6 +28,7 @@ export interface Reply {
 export interface Post {
   id: string;
   account_id: string;
+  batch_id: string | null;
   account_username: string;
   account_display_name: string | null;
   account_profile_image_url: string | null;
@@ -40,8 +41,6 @@ export interface Post {
   post_type: string;
   posted_at: string;
   scraped_at: string;
-  is_read: boolean;
-  is_archived: boolean;
   llm_status: string;
   replies: Reply[];
 }
@@ -61,8 +60,6 @@ export interface Account {
   profile_image_url: string | null;
   added_at: string;
   is_active: boolean;
-  last_checked_at: string | null;
-  last_post_id: string | null;
   post_count: number;
 }
 
@@ -74,22 +71,11 @@ export interface AccountList {
 }
 
 export interface Settings {
-  polling_interval_minutes: number;
   openrouter_model: string;
   system_prompt: string;
   replies_per_post: number;
   openrouter_api_key: string;
   x_api_key: string;
-}
-
-export interface ScraperStatus {
-  is_running: boolean;
-  last_run_at: string | null;
-  last_run_duration_seconds: number | null;
-  accounts_checked: number | null;
-  posts_found: number | null;
-  next_run_at: string | null;
-  status_message: string | null;
 }
 
 export interface BulkResult {
@@ -98,8 +84,39 @@ export interface BulkResult {
   error: string | null;
 }
 
-export interface BulkPostUpdateResult {
-  updated_count: number;
+// Retrieval batches
+export interface RetrievalAccountInfo {
+  id: string;
+  username: string;
+  display_name: string | null;
+  profile_image_url: string | null;
+}
+
+export interface RetrievalBatch {
+  id: string;
+  created_at: string;
+  since_dt: string | null;
+  until_dt: string | null;
+  status: string;
+  error_message: string | null;
+  accounts: RetrievalAccountInfo[];
+  post_count: number;
+}
+
+export interface RetrievalBatchDetail extends RetrievalBatch {
+  posts: Post[];
+}
+
+export interface RetrievalDefaults {
+  since_dt: string;
+  until_dt: string;
+}
+
+export interface RetrievalList {
+  retrievals: RetrievalBatch[];
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 // API functions
@@ -108,16 +125,8 @@ export const api = {
   getPosts: (params: Record<string, string>) =>
     request<PostList>(`/posts?${new URLSearchParams(params)}`),
   getPost: (id: string) => request<Post>(`/posts/${id}`),
-  getUnreadCount: () => request<{ count: number }>('/posts/unread-count'),
-  updatePost: (id: string, data: { is_read?: boolean; is_archived?: boolean }) =>
-    request<Post>(`/posts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   regenerateReplies: (id: string) =>
     request<Post>(`/posts/${id}/regenerate`, { method: 'POST' }),
-  bulkUpdatePosts: (postIds: string[], data: { is_read?: boolean; is_archived?: boolean }) =>
-    request<BulkPostUpdateResult>('/posts/bulk', {
-      method: 'PATCH',
-      body: JSON.stringify({ post_ids: postIds, ...data }),
-    }),
 
   // Accounts
   getAccounts: (params?: Record<string, string>) =>
@@ -140,10 +149,14 @@ export const api = {
   updateSettings: (data: Partial<Settings>) =>
     request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 
-  // Scraper
-  triggerPoll: () => request<{ message: string }>('/scraper/trigger', { method: 'POST' }),
-  getScraperStatus: () => request<ScraperStatus>('/settings/scraper-status'),
+  // Retrievals
+  getRetrievalDefaults: () => request<RetrievalDefaults>('/retrievals/defaults'),
+  createRetrieval: (data: { account_ids: string[]; since_dt?: string; until_dt?: string }) =>
+    request<RetrievalBatch>('/retrievals', { method: 'POST', body: JSON.stringify(data) }),
+  getRetrievals: (params?: Record<string, string>) =>
+    request<RetrievalList>(`/retrievals${params ? '?' + new URLSearchParams(params) : ''}`),
+  getRetrieval: (id: string) => request<RetrievalBatchDetail>(`/retrievals/${id}`),
 
   // Health
-  getHealth: () => request<{ status: string; db: string; scheduler: string }>('/health'),
+  getHealth: () => request<{ status: string; db: string }>('/health'),
 };

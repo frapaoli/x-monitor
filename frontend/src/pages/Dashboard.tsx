@@ -1,480 +1,562 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { Post } from '../api/client'
+import type { Account, RetrievalBatch, RetrievalBatchDetail } from '../api/client'
 import { api } from '../api/client'
 import PostCard from '../components/PostCard'
-import BulkActionBar from '../components/BulkActionBar'
-import FilterSidebar, { type Filters } from '../components/FilterSidebar'
 import { ToastProvider, useToast } from '../components/Toast'
 
 function DashboardInner() {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [focusIdx, setFocusIdx] = useState(-1)
-  const [refreshing, setRefreshing] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [bulkLoading, setBulkLoading] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [shortcutModalOpen, setShortcutModalOpen] = useState(false)
-  const cardRefs = useRef<(HTMLDivElement | null)[]>([])
-  const pageRef = useRef(1)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
+  const [sinceDt, setSinceDt] = useState('')
+  const [untilDt, setUntilDt] = useState('')
+  const [fetching, setFetching] = useState(false)
+
+  const [batches, setBatches] = useState<RetrievalBatch[]>([])
+  const [batchesTotal, setBatchesTotal] = useState(0)
+  const [batchesLoading, setBatchesLoading] = useState(true)
+  const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null)
+  const [expandedDetail, setExpandedDetail] = useState<RetrievalBatchDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const pageRef = useRef(1)
   const toast = useToast()
 
-  const selectionActive = selectedIds.size > 0
-
-  const [filters, setFilters] = useState<Filters>({
-    accountIds: [],
-    isRead: '',
-    search: '',
-  })
-
-  const hasActiveFilters = filters.accountIds.length > 0 || !!filters.isRead || !!filters.search
-
-  // Debounced search
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  // Load accounts
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(filters.search), 300)
-    return () => clearTimeout(t)
-  }, [filters.search])
+    api.getAccounts({ per_page: '200' }).then(r => setAccounts(r.accounts)).catch(() => {})
+  }, [])
 
-  const fetchPosts = useCallback(async (p: number) => {
-    setLoading(true)
+  // Load defaults
+  useEffect(() => {
+    api.getRetrievalDefaults().then(d => {
+      setSinceDt(toLocalDatetime(d.since_dt))
+      setUntilDt(toLocalDatetime(d.until_dt))
+    }).catch(() => {
+      const now = new Date()
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      setSinceDt(toLocalDatetime(yesterday.toISOString()))
+      setUntilDt(toLocalDatetime(now.toISOString()))
+    })
+  }, [])
+
+  // Load batches
+  const fetchBatches = useCallback(async (page: number) => {
+    setBatchesLoading(true)
     try {
-      const params: Record<string, string> = {
-        page: String(p),
-        per_page: '20',
-        is_archived: 'false',
-      }
-      if (filters.accountIds.length > 0) params.account_ids = filters.accountIds.join(',')
-      if (filters.isRead) params.is_read = filters.isRead
-      if (debouncedSearch) params.search = debouncedSearch
-
-      const data = await api.getPosts(params)
-      if (p === 1) {
-        setPosts(data.posts)
+      const data = await api.getRetrievals({ page: String(page), per_page: '20' })
+      if (page === 1) {
+        setBatches(data.retrievals)
       } else {
-        setPosts(prev => [...prev, ...data.posts])
+        setBatches(prev => [...prev, ...data.retrievals])
       }
-      setTotal(data.total)
+      setBatchesTotal(data.total)
     } catch {
-      toast('Failed to load posts', 'error')
+      toast('Failed to load retrievals', 'error')
     } finally {
-      setLoading(false)
+      setBatchesLoading(false)
     }
-  }, [JSON.stringify(filters.accountIds), filters.isRead, debouncedSearch, toast])
+  }, [toast])
 
   useEffect(() => {
     pageRef.current = 1
-    setSelectedIds(new Set())
-    fetchPosts(1)
-  }, [fetchPosts])
+    fetchBatches(1)
+  }, [fetchBatches])
 
-  // Infinite scroll
+  // Infinite scroll for batches
   useEffect(() => {
     const sentinel = sentinelRef.current
     if (!sentinel) return
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loading) {
+        if (entries[0].isIntersecting && !batchesLoading && batches.length < batchesTotal) {
           const nextPage = pageRef.current + 1
           pageRef.current = nextPage
-          fetchPosts(nextPage)
+          fetchBatches(nextPage)
         }
       },
       { rootMargin: '200px' }
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [fetchPosts, loading])
+  }, [fetchBatches, batchesLoading, batches.length, batchesTotal])
 
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    pageRef.current = 1
-    setSelectedIds(new Set())
-    await fetchPosts(1)
-    setRefreshing(false)
-    setFocusIdx(-1)
-  }
-
-  // Lock body scroll when drawer open
+  // Close dropdown on outside click
   useEffect(() => {
-    if (drawerOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => { document.body.style.overflow = '' }
-  }, [drawerOpen])
-
-  // Selection helpers
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
-
-  const selectAll = useCallback(() => {
-    setSelectedIds(new Set(posts.map(p => p.id)))
-  }, [posts])
-
-  const deselectAll = useCallback(() => {
-    setSelectedIds(new Set())
-  }, [])
-
-  // Bulk action handlers
-  const handleBulkMarkRead = useCallback(async () => {
-    if (bulkLoading) return
-    setBulkLoading(true)
-    try {
-      const ids = Array.from(selectedIds)
-      await api.bulkUpdatePosts(ids, { is_read: true })
-      setPosts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, is_read: true } : p))
-      toast(`Marked ${ids.length} as read`, 'success')
-      setSelectedIds(new Set())
-    } catch {
-      toast('Bulk update failed', 'error')
-    } finally {
-      setBulkLoading(false)
-    }
-  }, [selectedIds, bulkLoading, toast])
-
-  const handleBulkMarkUnread = useCallback(async () => {
-    if (bulkLoading) return
-    setBulkLoading(true)
-    try {
-      const ids = Array.from(selectedIds)
-      await api.bulkUpdatePosts(ids, { is_read: false })
-      setPosts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, is_read: false } : p))
-      toast(`Marked ${ids.length} as unread`, 'success')
-      setSelectedIds(new Set())
-    } catch {
-      toast('Bulk update failed', 'error')
-    } finally {
-      setBulkLoading(false)
-    }
-  }, [selectedIds, bulkLoading, toast])
-
-  const handleBulkArchive = useCallback(async () => {
-    if (bulkLoading) return
-    setBulkLoading(true)
-    try {
-      const ids = Array.from(selectedIds)
-      await api.bulkUpdatePosts(ids, { is_archived: true })
-      setPosts(prev => prev.filter(p => !selectedIds.has(p.id)))
-      setTotal(t => t - ids.length)
-      setFocusIdx(prev => Math.min(prev, posts.length - ids.length - 1))
-      toast(`Archived ${ids.length} posts`, 'success')
-      setSelectedIds(new Set())
-    } catch {
-      toast('Bulk archive failed', 'error')
-    } finally {
-      setBulkLoading(false)
-    }
-  }, [selectedIds, bulkLoading, posts.length, toast])
-
-  const handlePostUpdate = (updated: Post) => {
-    if (updated.is_archived) {
-      setPosts(prev => prev.filter(p => p.id !== updated.id))
-      setTotal(t => t - 1)
-      setSelectedIds(prev => {
-        if (!prev.has(updated.id)) return prev
-        const next = new Set(prev)
-        next.delete(updated.id)
-        return next
-      })
-    } else {
-      setPosts(prev => prev.map(p => p.id === updated.id ? updated : p))
-    }
-  }
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
-
-      switch (e.key) {
-        case 'j':
-          setFocusIdx(prev => {
-            const next = Math.min(prev + 1, posts.length - 1)
-            cardRefs.current[next]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            return next
-          })
-          break
-        case 'k':
-          setFocusIdx(prev => {
-            const next = Math.max(prev - 1, 0)
-            cardRefs.current[next]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            return next
-          })
-          break
-        case 'c':
-          if (focusIdx >= 0 && posts[focusIdx]?.replies?.length > 0) {
-            navigator.clipboard.writeText(posts[focusIdx].replies[0].reply_text)
-            toast('Copied reply #1', 'success')
-          }
-          break
-        case 'o':
-          if (focusIdx >= 0) {
-            window.open(posts[focusIdx].post_url, '_blank')
-          }
-          break
-        case 'r':
-          if (focusIdx >= 0) {
-            api.updatePost(posts[focusIdx].id, { is_read: true }).then(updated => {
-              handlePostUpdate(updated)
-              toast('Marked as read', 'success')
-            })
-          }
-          break
-        case 'a':
-          if (focusIdx >= 0) {
-            api.updatePost(posts[focusIdx].id, { is_archived: true }).then(updated => {
-              handlePostUpdate(updated)
-              toast('Archived', 'success')
-            })
-          }
-          break
-        case '?':
-          setShortcutModalOpen(prev => !prev)
-          break
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setAccountDropdownOpen(false)
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [posts, focusIdx, toast])
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
-  const hasMore = posts.length < total
+  // Cleanup poll timer
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+    }
+  }, [])
+
+  const toggleAccount = (id: string) => {
+    setSelectedAccountIds(prev =>
+      prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
+    )
+  }
+
+  const selectAllAccounts = () => {
+    setSelectedAccountIds(accounts.map(a => a.id))
+  }
+
+  const handleFetch = async () => {
+    if (selectedAccountIds.length === 0) {
+      toast('Select at least one account', 'error')
+      return
+    }
+    setFetching(true)
+    try {
+      const payload: { account_ids: string[]; since_dt?: string; until_dt?: string } = {
+        account_ids: selectedAccountIds,
+      }
+      if (sinceDt) payload.since_dt = new Date(sinceDt).toISOString()
+      if (untilDt) payload.until_dt = new Date(untilDt).toISOString()
+
+      const batch = await api.createRetrieval(payload)
+      toast('Retrieval started', 'success')
+
+      // Add to top of list
+      setBatches(prev => [batch, ...prev])
+      setBatchesTotal(t => t + 1)
+
+      // Auto-expand and poll for completion
+      setExpandedBatchId(batch.id)
+      setExpandedDetail(null)
+
+      const pollStatus = async () => {
+        try {
+          const detail = await api.getRetrieval(batch.id)
+          // Update batch in list
+          setBatches(prev => prev.map(b => b.id === batch.id ? {
+            ...b,
+            status: detail.status,
+            error_message: detail.error_message,
+            post_count: detail.post_count,
+          } : b))
+          if (detail.status !== 'running') {
+            if (pollTimerRef.current) {
+              clearInterval(pollTimerRef.current)
+              pollTimerRef.current = null
+            }
+            setExpandedDetail(detail)
+            // Update defaults for next retrieval
+            if (untilDt) setSinceDt(untilDt)
+            setUntilDt(toLocalDatetime(new Date().toISOString()))
+          }
+        } catch { /* ignore */ }
+      }
+
+      pollTimerRef.current = setInterval(pollStatus, 2000)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to create retrieval', 'error')
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  const handleExpandBatch = async (batchId: string) => {
+    if (expandedBatchId === batchId) {
+      setExpandedBatchId(null)
+      setExpandedDetail(null)
+      return
+    }
+    setExpandedBatchId(batchId)
+    setExpandedDetail(null)
+    setDetailLoading(true)
+    try {
+      const detail = await api.getRetrieval(batchId)
+      setExpandedDetail(detail)
+    } catch {
+      toast('Failed to load batch details', 'error')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const selectedAccounts = accounts.filter(a => selectedAccountIds.includes(a.id))
+  const hasMore = batches.length < batchesTotal
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-      <div className="flex gap-6">
-        {/* Sidebar */}
-        <aside className="hidden lg:block w-56 shrink-0">
-          <div className="sticky top-20 space-y-5">
-            <FilterSidebar filters={filters} onChange={setFilters} />
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+      {/* New Retrieval Panel */}
+      <div className="rounded-xl glass-card p-5 mb-6">
+        <h2 className="text-xs font-semibold text-ghost uppercase tracking-widest font-mono mb-4">New Retrieval</h2>
 
-            {/* Stats */}
-            <div className="p-3.5 rounded-xl glass-card">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[10px] font-mono text-ash/70 uppercase tracking-widest">Total</span>
-                <span className="text-lg font-mono font-bold text-ghost tabular-nums">{total}</span>
-              </div>
-              <div className="mt-2 h-px bg-gradient-to-r from-cyan-glow/20 via-cyan-glow/5 to-transparent" />
-              <div className="mt-2 text-[10px] font-mono text-ash/60">
-                {posts.length} loaded
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main feed */}
-        <div className="flex-1 min-w-0">
-          {/* Feed header with refresh */}
-          <div className="flex items-center justify-between mb-4">
-            {/* Mobile filter button */}
-            <div className="lg:hidden">
-              <button
-                onClick={() => setDrawerOpen(true)}
-                className="text-sm font-mono text-fog hover:text-ghost flex items-center gap-1.5 select-none px-2.5 py-1.5 rounded-lg hover:bg-slate-mid/20 transition-all"
-              >
-                <svg className="w-4 h-4 text-ash" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                Filters
-                {hasActiveFilters && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow" />
-                )}
-              </button>
-            </div>
-
-            {/* Desktop: just show count */}
-            <div className="hidden lg:flex items-center gap-2">
-              <span className="text-sm font-mono text-ash">
-                {total > 0 && `${posts.length} of ${total}`}
-              </span>
-            </div>
-
-            {/* Refresh button */}
+        {/* Account picker */}
+        <div className="mb-4">
+          <label className="block text-[10px] font-mono text-ash/80 uppercase tracking-widest mb-1.5">
+            Accounts
+          </label>
+          <div ref={dropdownRef} className="relative">
             <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 text-xs font-mono text-ash hover:text-cyan-glow px-2.5 py-1.5 rounded-lg hover:bg-cyan-glow/5 transition-all disabled:opacity-40"
+              type="button"
+              onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+              className="w-full bg-deep/80 border border-slate-mid/60 rounded-lg px-3 py-2 text-sm text-left font-mono transition-all hover:border-slate-light/50 focus:outline-none focus:border-cyan-glow/40 flex items-center gap-2 min-h-[38px]"
             >
-              <svg className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              {selectedAccounts.length === 0 ? (
+                <span className="text-steel/60">Select accounts...</span>
+              ) : (
+                <span className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {selectedAccounts.map(a => (
+                    <span
+                      key={a.id}
+                      className="inline-flex items-center gap-1 bg-cyan-glow/10 text-cyan-glow text-[11px] px-1.5 py-0.5 rounded"
+                    >
+                      @{a.username}
+                      <svg
+                        className="w-3 h-3 opacity-60 hover:opacity-100 cursor-pointer"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        onClick={e => { e.stopPropagation(); toggleAccount(a.id) }}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </span>
+                  ))}
+                </span>
+              )}
+              <svg className={`w-3.5 h-3.5 text-steel shrink-0 transition-transform ${accountDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {accountDropdownOpen && (
+              <div className="absolute z-20 mt-1 w-full rounded-lg bg-deep border border-slate-mid/60 shadow-xl max-h-52 overflow-y-auto animate-fade-in">
+                <button
+                  onClick={() => {
+                    if (selectedAccountIds.length === accounts.length) {
+                      setSelectedAccountIds([])
+                    } else {
+                      selectAllAccounts()
+                    }
+                  }}
+                  className="w-full text-left text-[11px] font-mono text-ash hover:text-fog hover:bg-slate-mid/20 px-3 py-2 border-b border-slate-mid/30 transition-colors"
+                >
+                  {selectedAccountIds.length === accounts.length ? 'Deselect all' : 'Select all'}
+                </button>
+                {accounts.map(a => {
+                  const isSelected = selectedAccountIds.includes(a.id)
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => toggleAccount(a.id)}
+                      className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm font-mono transition-colors ${
+                        isSelected ? 'text-cyan-glow bg-cyan-glow/5' : 'text-fog hover:bg-slate-mid/20'
+                      }`}
+                    >
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                        isSelected ? 'bg-cyan-glow border-cyan-glow text-void' : 'border-slate-mid/60'
+                      }`}>
+                        {isSelected && (
+                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </span>
+                      @{a.username}
+                    </button>
+                  )
+                })}
+                {accounts.length === 0 && (
+                  <div className="px-3 py-3 text-xs font-mono text-steel text-center">
+                    No accounts — <Link to="/accounts" className="text-cyan-glow">add some</Link>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Time range */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-[10px] font-mono text-ash/80 uppercase tracking-widest mb-1.5">
+              Since
+            </label>
+            <input
+              type="datetime-local"
+              value={sinceDt}
+              onChange={e => setSinceDt(e.target.value)}
+              className="w-full bg-deep/80 border border-slate-mid/50 rounded-lg px-3 py-2.5 text-sm text-mist focus:outline-none focus:border-cyan-glow/40 transition-all font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-mono text-ash/80 uppercase tracking-widest mb-1.5">
+              Until
+            </label>
+            <input
+              type="datetime-local"
+              value={untilDt}
+              onChange={e => setUntilDt(e.target.value)}
+              className="w-full bg-deep/80 border border-slate-mid/50 rounded-lg px-3 py-2.5 text-sm text-mist focus:outline-none focus:border-cyan-glow/40 transition-all font-mono"
+            />
+          </div>
+        </div>
+
+        {/* Fetch button */}
+        <button
+          onClick={handleFetch}
+          disabled={fetching || selectedAccountIds.length === 0}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-glow/10 border border-cyan-glow/25 text-cyan-glow text-sm font-mono font-medium hover:bg-cyan-glow/15 hover:border-cyan-glow/40 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {fetching ? (
+            <>
+              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Fetching...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
+              Fetch Posts
+            </>
+          )}
+        </button>
+      </div>
 
-          {/* Posts */}
+      {/* Batch list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-semibold text-ghost uppercase tracking-widest font-mono">Retrieval History</h2>
+          <span className="text-[11px] font-mono text-ash tabular-nums">{batchesTotal} total</span>
+        </div>
+
+        {batches.map(batch => (
+          <div key={batch.id} className="animate-fade-in">
+            <BatchCard
+              batch={batch}
+              isExpanded={expandedBatchId === batch.id}
+              detail={expandedBatchId === batch.id ? expandedDetail : null}
+              detailLoading={expandedBatchId === batch.id && detailLoading}
+              onToggle={() => handleExpandBatch(batch.id)}
+            />
+          </div>
+        ))}
+
+        {/* Loading skeleton */}
+        {batchesLoading && batches.length === 0 && (
           <div className="space-y-3">
-            {posts.map((post, i) => (
-              <div key={post.id} className="animate-fade-in" style={{ animationDelay: `${Math.min(i * 25, 250)}ms` }}>
-                <PostCard
-                  ref={el => { cardRefs.current[i] = el }}
-                  post={post}
-                  focused={i === focusIdx}
-                  selected={selectedIds.has(post.id)}
-                  selectionActive={selectionActive}
-                  onUpdate={handlePostUpdate}
-                  onToggleSelect={toggleSelect}
-                />
+            {[0, 1, 2].map(i => (
+              <div key={i} className="rounded-xl bg-abyss/80 border border-slate-mid/20 p-4 animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-32 skeleton" />
+                  <div className="h-3 w-20 skeleton" />
+                  <div className="ml-auto h-5 w-16 skeleton rounded-full" />
+                </div>
               </div>
             ))}
           </div>
+        )}
 
-          {/* Loading skeleton (initial) */}
-          {loading && posts.length === 0 && (
-            <div className="space-y-3 py-4">
-              {[0, 1, 2].map(i => (
-                <div key={i} className="rounded-xl bg-abyss/80 border border-slate-mid/20 p-4 animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-full skeleton" />
-                    <div className="space-y-2 flex-1">
-                      <div className="h-3 w-32 skeleton" />
-                      <div className="h-2.5 w-20 skeleton" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-3 w-full skeleton" />
-                    <div className="h-3 w-4/5 skeleton" />
-                    <div className="h-3 w-3/5 skeleton" />
-                  </div>
-                </div>
-              ))}
+        {/* Empty state */}
+        {!batchesLoading && batches.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-slate-mid/20 flex items-center justify-center mb-4">
+              <svg className="w-7 h-7 text-steel" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+              </svg>
+            </div>
+            <p className="text-fog font-medium text-sm">No retrievals yet</p>
+            <p className="text-ash text-xs mt-1.5 max-w-[280px]">
+              Select accounts above and click Fetch to retrieve posts
+            </p>
+          </div>
+        )}
+
+        {/* Infinite scroll sentinel */}
+        {hasMore && !batchesLoading && (
+          <div ref={sentinelRef} className="h-1" />
+        )}
+
+        {/* Loading more */}
+        {batchesLoading && batches.length > 0 && (
+          <div className="flex justify-center py-4">
+            <div className="flex items-center gap-2">
+              <svg className="animate-spin h-4 w-4 text-cyan-glow" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-xs font-mono text-ash">Loading more...</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BatchCard({
+  batch,
+  isExpanded,
+  detail,
+  detailLoading,
+  onToggle,
+}: {
+  batch: RetrievalBatch
+  isExpanded: boolean
+  detail: RetrievalBatchDetail | null
+  detailLoading: boolean
+  onToggle: () => void
+}) {
+  const statusColor = {
+    running: 'text-amber bg-amber/10 border-amber/20',
+    completed: 'text-emerald bg-emerald/10 border-emerald/20',
+    failed: 'text-rose bg-rose/10 border-rose/20',
+  }[batch.status] || 'text-ash bg-ash/10 border-ash/20'
+
+  const statusIcon = {
+    running: (
+      <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+    ),
+    completed: (
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    ),
+    failed: (
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    ),
+  }[batch.status]
+
+  return (
+    <div className={`rounded-xl transition-all ${
+      isExpanded
+        ? 'bg-deep/80 border border-cyan-glow/20 shadow-lg shadow-cyan-glow/5'
+        : 'bg-abyss/80 border border-slate-mid/30 hover:border-slate-mid/50'
+    }`}>
+      {/* Header — clickable */}
+      <button
+        onClick={onToggle}
+        className="w-full text-left px-4 py-3.5 flex items-center gap-3"
+      >
+        {/* Expand arrow */}
+        <svg className={`w-3.5 h-3.5 text-ash shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+
+        {/* Timestamp */}
+        <span className="text-[12px] font-mono text-fog tabular-nums whitespace-nowrap">
+          {new Date(batch.created_at).toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+          })}
+        </span>
+
+        {/* Time range */}
+        <span className="text-[11px] font-mono text-ash truncate hidden sm:inline">
+          {batch.since_dt ? formatDateShort(batch.since_dt) : '...'} — {batch.until_dt ? formatDateShort(batch.until_dt) : 'now'}
+        </span>
+
+        {/* Account chips */}
+        <span className="flex items-center gap-1 ml-auto shrink-0">
+          {batch.accounts.slice(0, 3).map(a => (
+            <span key={a.id} className="text-[10px] font-mono text-ash bg-slate-mid/20 px-1.5 py-0.5 rounded">
+              @{a.username}
+            </span>
+          ))}
+          {batch.accounts.length > 3 && (
+            <span className="text-[10px] font-mono text-ash">+{batch.accounts.length - 3}</span>
+          )}
+        </span>
+
+        {/* Post count */}
+        <span className="text-[11px] font-mono text-fog tabular-nums whitespace-nowrap">
+          {batch.post_count} post{batch.post_count !== 1 ? 's' : ''}
+        </span>
+
+        {/* Status badge */}
+        <span className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold tracking-wide px-2 py-0.5 rounded-full border ${statusColor}`}>
+          {statusIcon}
+          {batch.status}
+        </span>
+      </button>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="px-4 pb-4 border-t border-slate-mid/20">
+          {batch.error_message && (
+            <div className="mt-3 rounded-lg bg-rose/5 border border-rose/15 px-3 py-2">
+              <p className="text-[11px] font-mono text-rose/80">{batch.error_message}</p>
             </div>
           )}
 
-          {/* Empty states */}
-          {!loading && posts.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in">
-              <div className="w-16 h-16 rounded-2xl bg-slate-mid/20 flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-steel" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-                </svg>
-              </div>
-              {!hasActiveFilters ? (
-                <>
-                  <p className="text-fog font-medium text-sm">Welcome to X Monitor</p>
-                  <p className="text-ash text-xs mt-1.5 max-w-[280px]">
-                    Start by adding accounts to monitor on the{' '}
-                    <Link to="/accounts" className="text-cyan-glow hover:text-cyan-bright transition-colors">
-                      Accounts page
-                    </Link>
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-fog font-medium text-sm">No matching posts</p>
-                  <p className="text-ash text-xs mt-1.5 max-w-[240px]">No posts match your current filters</p>
-                  <button
-                    onClick={() => setFilters({ accountIds: [], isRead: '', search: '' })}
-                    className="mt-3 text-xs font-mono text-cyan-glow hover:text-cyan-bright px-3 py-1.5 rounded-lg border border-cyan-glow/20 hover:bg-cyan-glow/5 transition-all"
-                  >
-                    Clear Filters
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Infinite scroll sentinel */}
-          {hasMore && !loading && (
-            <div ref={sentinelRef} className="h-1" />
-          )}
-
-          {/* Loading indicator for more posts */}
-          {loading && posts.length > 0 && (
-            <div className="flex justify-center py-6">
+          {detailLoading && (
+            <div className="py-8 flex justify-center">
               <div className="flex items-center gap-2">
                 <svg className="animate-spin h-4 w-4 text-cyan-glow" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <span className="text-xs font-mono text-ash">Loading more...</span>
+                <span className="text-xs font-mono text-ash">Loading posts...</span>
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Mobile filter drawer */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-[80] lg:hidden">
-          <div className="absolute inset-0 bg-void/70 animate-fade-backdrop" onClick={() => setDrawerOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-72 bg-abyss border-r border-slate-mid/40 p-5 animate-slide-in-left overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <span className="text-sm font-mono font-semibold text-ghost">Filters</span>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="p-1.5 rounded-lg text-ash hover:text-fog hover:bg-slate-mid/20 transition-all"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          {batch.status === 'running' && !detail && !detailLoading && (
+            <div className="py-8 flex justify-center">
+              <div className="flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4 text-amber" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-              </button>
+                <span className="text-xs font-mono text-amber/80">Retrieval in progress...</span>
+              </div>
             </div>
-            <FilterSidebar filters={filters} onChange={f => { setFilters(f); }} />
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Keyboard shortcut modal */}
-      {shortcutModalOpen && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-void/80 backdrop-blur-sm animate-fade-backdrop"
-          onClick={() => setShortcutModalOpen(false)}
-        >
-          <div
-            className="bg-abyss border border-slate-mid/50 rounded-xl p-6 w-80 animate-fade-in-scale"
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="text-sm font-semibold text-ghost mb-4">Keyboard Shortcuts</h3>
-            <div className="space-y-2.5">
-              {[
-                ['J / K', 'Navigate posts'],
-                ['O', 'Open in X'],
-                ['R', 'Mark as read'],
-                ['A', 'Archive'],
-                ['C', 'Copy first reply'],
-                ['?', 'Toggle this modal'],
-              ].map(([key, desc]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <span className="text-xs text-ash font-mono">{desc}</span>
-                  <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 text-[11px] rounded border border-slate-light/30 bg-slate-dark/80 text-fog font-mono px-1.5">
-                    {key}
-                  </kbd>
-                </div>
+          {detail && detail.posts.length === 0 && batch.status === 'completed' && (
+            <div className="py-6 text-center">
+              <p className="text-xs font-mono text-ash">No posts found in this time range</p>
+            </div>
+          )}
+
+          {detail && detail.posts.length > 0 && (
+            <div className="mt-3 space-y-3">
+              {detail.posts.map(post => (
+                <PostCard key={post.id} post={post} />
               ))}
             </div>
-            <button
-              onClick={() => setShortcutModalOpen(false)}
-              className="mt-5 w-full text-xs font-mono text-ash hover:text-fog py-2 rounded-lg hover:bg-slate-mid/20 transition-all"
-            >
-              Close
-            </button>
-          </div>
+          )}
         </div>
       )}
-
-      <BulkActionBar
-        selectedCount={selectedIds.size}
-        totalCount={posts.length}
-        disabled={bulkLoading}
-        onSelectAll={selectAll}
-        onDeselectAll={deselectAll}
-        onMarkRead={handleBulkMarkRead}
-        onMarkUnread={handleBulkMarkUnread}
-        onArchive={handleBulkArchive}
-      />
     </div>
   )
+}
+
+function toLocalDatetime(isoStr: string): string {
+  const d = new Date(isoStr)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function formatDateShort(isoStr: string): string {
+  return new Date(isoStr).toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
 }
 
 export default function Dashboard() {

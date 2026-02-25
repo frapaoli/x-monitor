@@ -12,7 +12,7 @@ class Post(Base):
     __tablename__ = "posts"
     __table_args__ = (
         Index("ix_posts_account_posted", "account_id", "posted_at"),
-        Index("ix_posts_unread", "is_read", postgresql_where="is_read = FALSE"),
+        Index("ix_posts_batch_id", "batch_id"),
         Index("ix_posts_llm_status", "llm_status"),
     )
 
@@ -20,7 +20,10 @@ class Post(Base):
     account_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("monitored_accounts.id", ondelete="CASCADE"), nullable=False
     )
-    external_post_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("retrieval_batches.id", ondelete="CASCADE"), nullable=True
+    )
+    external_post_id: Mapped[str] = mapped_column(String(100), nullable=False)
     post_url: Mapped[str] = mapped_column(Text, nullable=False)
     text_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     has_media: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -31,9 +34,8 @@ class Post(Base):
     scraped_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
-    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     llm_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
     account = relationship("MonitoredAccount", back_populates="posts")
+    batch = relationship("RetrievalBatch", back_populates="posts")
     replies = relationship("GeneratedReply", back_populates="post", cascade="all, delete-orphan")

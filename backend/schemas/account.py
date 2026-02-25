@@ -24,8 +24,6 @@ class AccountResponse(BaseModel):
     profile_image_url: str | None = None
     added_at: datetime
     is_active: bool
-    last_checked_at: datetime | None
-    last_post_id: str | None
     post_count: int = 0
 
     model_config = {"from_attributes": True}

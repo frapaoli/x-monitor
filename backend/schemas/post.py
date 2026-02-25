@@ -6,14 +6,10 @@ from pydantic import BaseModel
 from schemas.reply import ReplyResponse
 
 
-class PostUpdate(BaseModel):
-    is_read: bool | None = None
-    is_archived: bool | None = None
-
-
 class PostResponse(BaseModel):
     id: uuid.UUID
     account_id: uuid.UUID
+    batch_id: uuid.UUID | None = None
     account_username: str = ""
     account_display_name: str | None = None
     account_profile_image_url: str | None = None
@@ -26,8 +22,6 @@ class PostResponse(BaseModel):
     post_type: str
     posted_at: datetime
     scraped_at: datetime
-    is_read: bool
-    is_archived: bool
     llm_status: str
     replies: list[ReplyResponse] = []
 
@@ -39,17 +33,3 @@ class PostListResponse(BaseModel):
     total: int
     page: int
     per_page: int
-
-
-class BulkPostUpdate(BaseModel):
-    post_ids: list[uuid.UUID]
-    is_read: bool | None = None
-    is_archived: bool | None = None
-
-
-class BulkPostUpdateResponse(BaseModel):
-    updated_count: int
-
-
-class UnreadCountResponse(BaseModel):
-    count: int

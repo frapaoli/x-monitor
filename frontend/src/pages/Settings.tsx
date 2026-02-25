@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Settings as SettingsType, ScraperStatus } from '../api/client'
+import type { Settings as SettingsType } from '../api/client'
 import { api } from '../api/client'
 import { ToastProvider, useToast } from '../components/Toast'
 
@@ -16,12 +16,9 @@ type FieldStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 function SettingsInner() {
   const [settings, setSettings] = useState<SettingsType | null>(null)
-  const [scraperStatus, setScraperStatus] = useState<ScraperStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [polling, setPolling] = useState(false)
 
   // Form state
-  const [interval, setInterval_] = useState(30)
   const [model, setModel] = useState('')
   const [prompt, setPrompt] = useState('')
   const [repliesCount, setRepliesCount] = useState(10)
@@ -38,13 +35,8 @@ function SettingsInner() {
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [s, status] = await Promise.all([
-        api.getSettings(),
-        api.getScraperStatus().catch(() => null),
-      ])
+      const s = await api.getSettings()
       setSettings(s)
-      setScraperStatus(status)
-      setInterval_(s.polling_interval_minutes)
       setModel(s.openrouter_model)
       setPrompt(s.system_prompt)
       setRepliesCount(s.replies_per_post)
@@ -59,14 +51,6 @@ function SettingsInner() {
 
   useEffect(() => { fetchAll() }, [])
 
-  // Refresh scraper status periodically
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      api.getScraperStatus().then(setScraperStatus).catch(() => {})
-    }, 10000)
-    return () => window.clearInterval(t)
-  }, [])
-
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
@@ -80,7 +64,6 @@ function SettingsInner() {
     try {
       await api.updateSettings({ [key]: value })
       setFieldStatus(prev => ({ ...prev, [key]: 'saved' }))
-      // Clear "saved" after 2s
       if (savedTimers.current[key]) clearTimeout(savedTimers.current[key])
       savedTimers.current[key] = setTimeout(() => {
         setFieldStatus(prev => ({ ...prev, [key]: 'idle' }))
@@ -94,18 +77,6 @@ function SettingsInner() {
     if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key])
     debounceTimers.current[key] = setTimeout(() => saveField(key, value), delay)
   }, [saveField])
-
-  const handlePollNow = async () => {
-    setPolling(true)
-    try {
-      const result = await api.triggerPoll()
-      toast(result.message, 'success')
-    } catch {
-      toast('Failed to trigger poll', 'error')
-    } finally {
-      setPolling(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -128,102 +99,7 @@ function SettingsInner() {
       <h1 className="text-lg font-bold text-ghost mb-6">Settings</h1>
 
       <div className="space-y-6">
-        {/* Section 1 — Scraper */}
-        <div className="rounded-xl glass-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-semibold text-ghost uppercase tracking-widest font-mono">Scraper</h2>
-            {scraperStatus && (
-              <div className={`flex items-center gap-1.5 text-[11px] font-mono ${
-                scraperStatus.is_running ? 'text-emerald' : 'text-ash'
-              }`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${
-                  scraperStatus.is_running ? 'bg-emerald unread-dot' : 'bg-steel'
-                }`} />
-                {scraperStatus.is_running ? 'Running' : 'Idle'}
-              </div>
-            )}
-          </div>
-
-          {scraperStatus?.status_message && (
-            <div className="mb-4 rounded-lg bg-amber/5 border border-amber/15 px-3 py-2">
-              <p className="text-[11px] font-mono text-amber/80 leading-relaxed">{scraperStatus.status_message}</p>
-            </div>
-          )}
-
-          {scraperStatus ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatusRow label="Last run" value={
-                  scraperStatus.last_run_at ? formatRelative(scraperStatus.last_run_at) : 'Never'
-                } />
-                <StatusRow label="Duration" value={
-                  scraperStatus.last_run_duration_seconds != null
-                    ? `${Math.round(scraperStatus.last_run_duration_seconds)}s`
-                    : '—'
-                } />
-                <StatusRow label="Checked" value={
-                  scraperStatus.accounts_checked != null ? String(scraperStatus.accounts_checked) : '—'
-                } />
-                <StatusRow label="Found" value={
-                  scraperStatus.posts_found != null ? String(scraperStatus.posts_found) : '—'
-                } />
-              </div>
-
-              <StatusRow label="Next run" value={
-                scraperStatus.next_run_at ? new Date(scraperStatus.next_run_at).toLocaleTimeString() : '—'
-              } />
-
-              {/* Polling interval */}
-              <div className="pt-2 border-t border-slate-mid/20">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[10px] font-mono text-ash/80 uppercase tracking-widest">
-                    Polling Interval: <span className="text-cyan-glow tabular-nums">{interval} min</span>
-                  </label>
-                  <SaveIndicator status={fieldStatus['polling_interval_minutes']} />
-                </div>
-                <input
-                  type="range"
-                  min={15}
-                  max={120}
-                  step={5}
-                  value={interval}
-                  onChange={e => {
-                    const v = Number(e.target.value)
-                    setInterval_(v)
-                    saveField('polling_interval_minutes', v)
-                  }}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-[10px] font-mono text-steel/60 mt-1">
-                  <span>15m</span>
-                  <span>120m</span>
-                </div>
-              </div>
-
-              <button
-                onClick={handlePollNow}
-                disabled={polling || scraperStatus.is_running}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-cyan-glow/8 border border-cyan-glow/20 text-cyan-glow text-xs font-mono font-medium hover:bg-cyan-glow/12 hover:border-cyan-glow/30 transition-all disabled:opacity-30"
-              >
-                {polling ? (
-                  <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                )}
-                {polling ? 'Starting...' : 'Poll Now'}
-              </button>
-            </div>
-          ) : (
-            <p className="text-sm text-ash font-mono">Status unavailable</p>
-          )}
-        </div>
-
-        {/* Section 2 — AI Configuration */}
+        {/* Section 1 — AI Configuration */}
         <div className="rounded-xl glass-card p-5 space-y-5">
           <h2 className="text-xs font-semibold text-ghost uppercase tracking-widest font-mono">AI Configuration</h2>
 
@@ -298,7 +174,7 @@ function SettingsInner() {
           </div>
         </div>
 
-        {/* Section 3 — API Keys */}
+        {/* Section 2 — API Keys */}
         <div className="rounded-xl glass-card p-5 space-y-4">
           <h2 className="text-xs font-semibold text-ghost uppercase tracking-widest font-mono">API Keys</h2>
 
@@ -376,25 +252,6 @@ function SaveIndicator({ status }: { status?: FieldStatus }) {
        'Error'}
     </span>
   )
-}
-
-function StatusRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[11px] font-mono text-ash/60">{label}</span>
-      <span className="text-[12px] font-mono text-fog tabular-nums">{value}</span>
-    </div>
-  )
-}
-
-function formatRelative(dateStr: string): string {
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diff = Math.floor((now - then) / 1000)
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return new Date(dateStr).toLocaleDateString()
 }
 
 export default function Settings() {

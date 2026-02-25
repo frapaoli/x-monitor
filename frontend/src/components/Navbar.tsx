@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { api } from '../api/client'
 
 const navItems = [
   {
@@ -11,7 +9,6 @@ const navItems = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
       </svg>
     ),
-    hasBadge: true,
   },
   {
     to: '/accounts',
@@ -35,17 +32,7 @@ const navItems = [
 ]
 
 export default function Navbar() {
-  const [unread, setUnread] = useState(0)
   const location = useLocation()
-
-  useEffect(() => {
-    const fetchUnread = () => {
-      api.getUnreadCount().then(r => setUnread(r.count)).catch(() => {})
-    }
-    fetchUnread()
-    const interval = setInterval(fetchUnread, 30000)
-    return () => clearInterval(interval)
-  }, [])
 
   return (
     <nav className="sticky top-0 z-50 border-b border-slate-mid/40 bg-void/70 backdrop-blur-xl">
@@ -81,46 +68,11 @@ export default function Navbar() {
               >
                 {item.icon}
                 <span className="hidden sm:inline">{item.label}</span>
-                {item.hasBadge && unread > 0 && (
-                  <span className="absolute -top-1 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-cyan-glow text-void text-[10px] font-bold font-mono px-1 shadow-lg shadow-cyan-glow/30">
-                    {unread > 99 ? '99+' : unread}
-                  </span>
-                )}
               </NavLink>
             ))}
           </div>
         </div>
-
-        {/* Kbd hints - only on Feed page, desktop */}
-        {location.pathname === '/' && (
-          <div className="hidden md:flex items-center gap-3 font-mono text-[11px] text-steel">
-            <span className="flex items-center gap-1">
-              <Kbd>J</Kbd><Kbd>K</Kbd>
-              <span className="text-ash/60">navigate</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <Kbd>C</Kbd>
-              <span className="text-ash/60">copy</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <Kbd>O</Kbd>
-              <span className="text-ash/60">open</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <Kbd>?</Kbd>
-              <span className="text-ash/60">help</span>
-            </span>
-          </div>
-        )}
       </div>
     </nav>
-  )
-}
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="inline-flex items-center justify-center w-5 h-5 text-[10px] rounded border border-slate-light/30 bg-slate-dark/80 text-fog font-mono leading-none">
-      {children}
-    </kbd>
   )
 }

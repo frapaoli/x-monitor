@@ -2,15 +2,14 @@ import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from models.account import MonitoredAccount
 from models.post import Post
 from models.reply import GeneratedReply
-from schemas.post import BulkPostUpdate, BulkPostUpdateResponse, PostListResponse, PostResponse, PostUpdate, UnreadCountResponse
+from schemas.post import PostListResponse, PostResponse
 from schemas.reply import ReplyResponse
 
 router = APIRouter()
@@ -36,6 +35,7 @@ def _post_to_response(post: Post) -> PostResponse:
     return PostResponse(
         id=post.id,
         account_id=post.account_id,
+        batch_id=post.batch_id,
         account_username=post.account.username if post.account else "",
         account_display_name=post.account.display_name if post.account else None,
         account_profile_image_url=post.account.profile_image_url if post.account else None,
@@ -48,8 +48,6 @@ def _post_to_response(post: Post) -> PostResponse:
         post_type=post.post_type,
         posted_at=post.posted_at,
         scraped_at=post.scraped_at,
-        is_read=post.is_read,
-        is_archived=post.is_archived,
         llm_status=post.llm_status,
         replies=replies,
     )
@@ -60,8 +58,7 @@ async def list_posts(
     page: int = 1,
     per_page: int = 20,
     account_ids: str | None = Query(default=None, description="Comma-separated account UUIDs"),
-    is_read: bool | None = None,
-    is_archived: bool | None = Query(default=False),
+    batch_id: str | None = Query(default=None, description="Filter by retrieval batch ID"),
     post_type: str | None = None,
     search: str | None = None,
     db: AsyncSession = Depends(get_db),
@@ -81,13 +78,13 @@ async def list_posts(
             query = query.where(Post.account_id.in_(id_list))
             count_query = count_query.where(Post.account_id.in_(id_list))
 
-    if is_read is not None:
-        query = query.where(Post.is_read == is_read)
-        count_query = count_query.where(Post.is_read == is_read)
-
-    if is_archived is not None:
-        query = query.where(Post.is_archived == is_archived)
-        count_query = count_query.where(Post.is_archived == is_archived)
+    if batch_id:
+        try:
+            bid = uuid.UUID(batch_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid batch_id UUID")
+        query = query.where(Post.batch_id == bid)
+        count_query = count_query.where(Post.batch_id == bid)
 
     if post_type is not None:
         query = query.where(Post.post_type == post_type)
@@ -113,40 +110,6 @@ async def list_posts(
     )
 
 
-@router.get("/unread-count", response_model=UnreadCountResponse)
-async def unread_count(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(func.count(Post.id)).where(Post.is_read == False, Post.is_archived == False)
-    )
-    count = result.scalar() or 0
-    return UnreadCountResponse(count=count)
-
-
-@router.patch("/bulk", response_model=BulkPostUpdateResponse)
-async def bulk_update_posts(
-    data: BulkPostUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    if not data.post_ids:
-        raise HTTPException(status_code=422, detail="post_ids must not be empty")
-    if len(data.post_ids) > 100:
-        raise HTTPException(status_code=422, detail="Maximum 100 post IDs per request")
-    if data.is_read is None and data.is_archived is None:
-        raise HTTPException(status_code=422, detail="At least one update field required")
-
-    values = {}
-    if data.is_read is not None:
-        values["is_read"] = data.is_read
-    if data.is_archived is not None:
-        values["is_archived"] = data.is_archived
-
-    result = await db.execute(
-        update(Post).where(Post.id.in_(data.post_ids)).values(**values)
-    )
-    await db.flush()
-    return BulkPostUpdateResponse(updated_count=result.rowcount)
-
-
 @router.get("/{post_id}", response_model=PostResponse)
 async def get_post(post_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -158,34 +121,6 @@ async def get_post(post_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    # Auto-mark as read
-    if not post.is_read:
-        post.is_read = True
-
-    return _post_to_response(post)
-
-
-@router.patch("/{post_id}", response_model=PostResponse)
-async def update_post(
-    post_id: uuid.UUID,
-    data: PostUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(Post)
-        .options(selectinload(Post.replies), selectinload(Post.account))
-        .where(Post.id == post_id)
-    )
-    post = result.scalar_one_or_none()
-    if not post:
-        raise HTTPException(status_code=404, detail="Post not found")
-
-    if data.is_read is not None:
-        post.is_read = data.is_read
-    if data.is_archived is not None:
-        post.is_archived = data.is_archived
-
-    await db.flush()
     return _post_to_response(post)
 
 

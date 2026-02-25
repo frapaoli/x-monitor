@@ -227,7 +227,6 @@ function AccountsInner() {
               <tr className="border-b border-slate-mid/30">
                 <th className="text-left text-[10px] font-mono text-ash/70 uppercase tracking-widest px-4 py-3">Account</th>
                 <th className="text-center text-[10px] font-mono text-ash/70 uppercase tracking-widest px-4 py-3">Active</th>
-                <th className="text-left text-[10px] font-mono text-ash/70 uppercase tracking-widest px-4 py-3 hidden sm:table-cell">Last Checked</th>
                 <th className="text-right text-[10px] font-mono text-ash/70 uppercase tracking-widest px-4 py-3">Posts</th>
                 <th className="text-right text-[10px] font-mono text-ash/70 uppercase tracking-widest px-4 py-3 w-24"></th>
               </tr>
@@ -316,13 +315,6 @@ function AccountsInner() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 hidden sm:table-cell">
-                    <span className="text-xs font-mono text-ash tabular-nums">
-                      {account.last_checked_at
-                        ? formatRelativeTime(account.last_checked_at)
-                        : '—'}
-                    </span>
-                  </td>
                   <td className="px-4 py-3.5 text-right">
                     <span className="text-sm font-mono text-fog tabular-nums">{account.post_count}</span>
                   </td>
@@ -361,17 +353,6 @@ function AccountsInner() {
       </div>
     </div>
   )
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diff = Math.floor((now - then) / 1000)
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
-  return new Date(dateStr).toLocaleDateString()
 }
 
 export default function Accounts() {
