@@ -21,6 +21,7 @@ class AccountResponse(BaseModel):
     username: str
     display_name: str | None
     x_user_id: str | None
+    profile_image_url: str | None = None
     added_at: datetime
     is_active: bool
     last_checked_at: datetime | None

@@ -38,6 +38,7 @@ def _post_to_response(post: Post) -> PostResponse:
         account_id=post.account_id,
         account_username=post.account.username if post.account else "",
         account_display_name=post.account.display_name if post.account else None,
+        account_profile_image_url=post.account.profile_image_url if post.account else None,
         external_post_id=post.external_post_id,
         post_url=post.post_url,
         text_content=post.text_content,

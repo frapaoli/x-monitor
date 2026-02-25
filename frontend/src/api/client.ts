@@ -30,6 +30,7 @@ export interface Post {
   account_id: string;
   account_username: string;
   account_display_name: string | null;
+  account_profile_image_url: string | null;
   external_post_id: string;
   post_url: string;
   text_content: string | null;
@@ -57,6 +58,7 @@ export interface Account {
   username: string;
   display_name: string | null;
   x_user_id: string | null;
+  profile_image_url: string | null;
   added_at: string;
   is_active: boolean;
   last_checked_at: string | null;

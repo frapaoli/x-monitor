@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,5 +21,6 @@ class MonitoredAccount(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_post_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    profile_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     posts = relationship("Post", back_populates="account", cascade="all, delete-orphan")

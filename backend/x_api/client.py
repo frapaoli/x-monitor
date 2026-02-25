@@ -22,6 +22,7 @@ class XUser:
     id: str
     username: str
     name: str
+    profile_image_url: str | None = None
 
 
 @dataclass
@@ -33,6 +34,7 @@ class XTweet:
     referenced_type: str | None = None  # "retweeted", "quoted", "replied_to"
     author_username: str = ""
     author_id: str = ""
+    author_profile_image_url: str | None = None
 
 
 class XAPIError(Exception):
@@ -84,7 +86,16 @@ class XAPIClient:
         if not data:
             raise XAPIError(404, "User not found")
 
-        return XUser(id=str(data["id"]), username=data["userName"], name=data["name"])
+        # Get higher-res avatar by replacing _normal suffix (48×48 → 200×200)
+        raw_pic = data.get("profilePicture") or ""
+        profile_pic = raw_pic.replace("_normal.", "_200x200.") if raw_pic else None
+
+        return XUser(
+            id=str(data["id"]),
+            username=data["userName"],
+            name=data["name"],
+            profile_image_url=profile_pic,
+        )
 
     async def get_user_tweets(
         self,
@@ -122,7 +133,7 @@ class XAPIClient:
 
         return tweets[:max_results]
 
-    def _parse_tweet(self, t: dict, author_username: str = "", author_id: str = "") -> XTweet:
+    def _parse_tweet(self, t: dict, author_username: str = "", author_id: str = "", author_profile_image_url: str | None = None) -> XTweet:
         """Parse a tweet dict (shared between last_tweets and advanced_search)."""
         ref_type = None
         if t.get("isReply"):
@@ -148,6 +159,7 @@ class XAPIClient:
             referenced_type=ref_type,
             author_username=author_username,
             author_id=author_id,
+            author_profile_image_url=author_profile_image_url,
         )
 
     async def search_tweets_by_users(
@@ -202,6 +214,7 @@ class XAPIClient:
                     t,
                     author_username=author.get("userName", "").lower(),
                     author_id=str(author.get("id", "")),
+                    author_profile_image_url=(author.get("profilePicture") or "").replace("_normal.", "_200x200.") or None,
                 )
                 all_tweets.append(tweet)
 

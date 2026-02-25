@@ -17,6 +17,7 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, s
   const toast = useToast()
   const [expanded, setExpanded] = useState(false)
   const [imgIdx, setImgIdx] = useState<number | null>(null)
+  const [imgError, setImgError] = useState(false)
 
   const timeAgo = formatTimeAgo(post.posted_at)
 
@@ -89,9 +90,18 @@ const PostCard = forwardRef<HTMLDivElement, Props>(({ post, focused, selected, s
               </svg>
             </button>
             {/* Avatar */}
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-mid to-slate-dark flex items-center justify-center text-[11px] font-bold text-fog/80 uppercase shrink-0 ring-1 ring-slate-light/20">
-              {post.account_username.slice(0, 2)}
-            </div>
+            {post.account_profile_image_url && !imgError ? (
+              <img
+                src={post.account_profile_image_url}
+                alt={`@${post.account_username}`}
+                className="w-9 h-9 rounded-full shrink-0 ring-1 ring-slate-light/20 object-cover"
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-mid to-slate-dark flex items-center justify-center text-[11px] font-bold text-fog/80 uppercase shrink-0 ring-1 ring-slate-light/20">
+                {post.account_username.slice(0, 2)}
+              </div>
+            )}
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[13px] font-semibold text-ghost truncate">

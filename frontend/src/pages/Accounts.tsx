@@ -268,13 +268,23 @@ function AccountsInner() {
                 >
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold uppercase shrink-0 ring-1 ${
-                        account.is_active
-                          ? 'bg-gradient-to-br from-cyan-glow/20 to-cyan-dim/10 text-cyan-glow ring-cyan-glow/20'
-                          : 'bg-slate-mid/30 text-steel ring-slate-mid/30'
-                      }`}>
-                        {account.username.slice(0, 2)}
-                      </div>
+                      {account.profile_image_url ? (
+                        <img
+                          src={account.profile_image_url}
+                          alt={`@${account.username}`}
+                          className={`w-8 h-8 rounded-full shrink-0 ring-1 object-cover ${
+                            account.is_active ? 'ring-cyan-glow/20' : 'ring-slate-mid/30 opacity-60'
+                          }`}
+                        />
+                      ) : (
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold uppercase shrink-0 ring-1 ${
+                          account.is_active
+                            ? 'bg-gradient-to-br from-cyan-glow/20 to-cyan-dim/10 text-cyan-glow ring-cyan-glow/20'
+                            : 'bg-slate-mid/30 text-steel ring-slate-mid/30'
+                        }`}>
+                          {account.username.slice(0, 2)}
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <span className="text-sm font-mono text-cyan-glow block truncate">@{account.username}</span>
                         {account.display_name && (

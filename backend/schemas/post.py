@@ -16,6 +16,7 @@ class PostResponse(BaseModel):
     account_id: uuid.UUID
     account_username: str = ""
     account_display_name: str | None = None
+    account_profile_image_url: str | None = None
     external_post_id: str
     post_url: str
     text_content: str | None

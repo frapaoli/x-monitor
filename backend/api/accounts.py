@@ -26,6 +26,7 @@ def _account_to_response(account: MonitoredAccount, post_count: int = 0) -> Acco
         username=account.username,
         display_name=account.display_name,
         x_user_id=account.x_user_id,
+        profile_image_url=account.profile_image_url,
         added_at=account.added_at,
         is_active=account.is_active,
         last_checked_at=account.last_checked_at,
@@ -86,13 +87,15 @@ async def create_account(
     from app_state import app_state
     x_user_id = None
     display_name = None
+    profile_image_url = None
     if app_state.get("scraper_service"):
-        x_user_id, display_name = await app_state["scraper_service"].resolve_user_id(username)
+        x_user_id, display_name, profile_image_url = await app_state["scraper_service"].resolve_user_id(username)
 
     account = MonitoredAccount(
         username=username,
         display_name=display_name,
         x_user_id=x_user_id,
+        profile_image_url=profile_image_url,
     )
     db.add(account)
     await db.flush()
@@ -121,10 +124,11 @@ async def bulk_create_accounts(
             from app_state import app_state
             x_user_id = None
             display_name = None
+            profile_image_url = None
             if app_state.get("scraper_service"):
-                x_user_id, display_name = await app_state["scraper_service"].resolve_user_id(username)
+                x_user_id, display_name, profile_image_url = await app_state["scraper_service"].resolve_user_id(username)
 
-            account = MonitoredAccount(username=username, display_name=display_name, x_user_id=x_user_id)
+            account = MonitoredAccount(username=username, display_name=display_name, x_user_id=x_user_id, profile_image_url=profile_image_url)
             db.add(account)
             await db.flush()
             results.append(BulkCreateResult(

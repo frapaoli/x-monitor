@@ -51,19 +51,23 @@ class ScraperService:
         try:
             if not account.x_user_id:
                 logger.info(f"Account @{account.username} has no x_user_id, attempting to resolve...")
-                user_id, display_name = await self.resolve_user_id(account.username)
+                user_id, display_name, profile_image_url = await self.resolve_user_id(account.username)
                 if not user_id:
                     logger.warning(f"Could not resolve x_user_id for @{account.username}, skipping")
                     return []
                 account.x_user_id = user_id
                 if display_name:
                     account.display_name = display_name
+                if profile_image_url:
+                    account.profile_image_url = profile_image_url
                 if session:
                     acc = await session.get(MonitoredAccount, account.id)
                     if acc:
                         acc.x_user_id = user_id
                         if display_name:
                             acc.display_name = display_name
+                        if profile_image_url:
+                            acc.profile_image_url = profile_image_url
                 logger.info(f"Resolved @{account.username} → user_id={user_id}")
 
             tweets = await self.x_api.get_user_tweets(
@@ -180,12 +184,16 @@ class ScraperService:
                         self.last_error = str(e)
                         errors += 1
 
-                # Backfill x_user_id from search results (free — no extra API call)
+                # Backfill x_user_id and profile_image_url from search results (free — no extra API call)
                 for tweet in all_tweets:
                     acct = by_username.get(tweet.author_username)
-                    if acct and not acct.x_user_id and tweet.author_id:
-                        acct.x_user_id = tweet.author_id
-                        logger.info(f"Backfilled x_user_id for @{acct.username} → {tweet.author_id}")
+                    if acct:
+                        if not acct.x_user_id and tweet.author_id:
+                            acct.x_user_id = tweet.author_id
+                            logger.info(f"Backfilled x_user_id for @{acct.username} → {tweet.author_id}")
+                        if not acct.profile_image_url and tweet.author_profile_image_url:
+                            acct.profile_image_url = tweet.author_profile_image_url
+                            logger.info(f"Backfilled profile_image_url for @{acct.username}")
 
                 # Process per-account: filter by each account's own last_post_id
                 for account in accounts:
@@ -317,13 +325,13 @@ class ScraperService:
 
         return saved
 
-    async def resolve_user_id(self, username: str) -> tuple[str | None, str | None]:
-        """Resolve a username to a numeric X user ID and display name."""
+    async def resolve_user_id(self, username: str) -> tuple[str | None, str | None, str | None]:
+        """Resolve a username to a numeric X user ID, display name, and profile image URL."""
         try:
             user = await self.x_api.get_user_by_username(username)
-            return user.id, user.name
+            return user.id, user.name, user.profile_image_url
         except XAPIError as e:
             logger.error(f"X API error resolving @{username}: {e}")
         except Exception as e:
             logger.error(f"Failed to resolve user @{username}: {e}")
-        return None, None
+        return None, None, None
