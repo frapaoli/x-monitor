@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from database import get_db
 from models.post import Post
 from models.reply import GeneratedReply
-from schemas.post import PostListResponse, PostResponse
+from schemas.post import GenerateRequest, PostListResponse, PostResponse
 from schemas.reply import ReplyResponse
 
 router = APIRouter()
@@ -125,7 +125,7 @@ async def get_post(post_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{post_id}/regenerate", response_model=PostResponse)
-async def regenerate_replies(post_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def regenerate_replies(post_id: uuid.UUID, body: GenerateRequest | None = None, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Post)
         .options(selectinload(Post.replies), selectinload(Post.account))
@@ -138,13 +138,14 @@ async def regenerate_replies(post_id: uuid.UUID, db: AsyncSession = Depends(get_
     # Delete existing replies
     from sqlalchemy import delete as sa_delete
     await db.execute(sa_delete(GeneratedReply).where(GeneratedReply.post_id == post.id))
-    post.llm_status = "pending"
+    post.llm_status = "processing"
     post.replies = []
     await db.flush()
 
     # Trigger LLM generation
+    suggestion = body.suggestion if body else None
     from app_state import app_state
     if app_state.get("llm_service"):
-        asyncio.create_task(app_state["llm_service"].generate_replies(str(post.id)))
+        asyncio.create_task(app_state["llm_service"].generate_replies(str(post.id), suggestion=suggestion))
 
     return _post_to_response(post)

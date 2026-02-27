@@ -1,10 +1,10 @@
 import asyncio
 import base64
-import json
 import logging
 from pathlib import Path
 
 import httpx
+from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
@@ -16,16 +16,8 @@ from models.settings import AppSetting
 logger = logging.getLogger(__name__)
 
 
-def parse_replies(llm_response_content: str) -> list[str]:
-    text = llm_response_content.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1]
-        text = text.rsplit("```", 1)[0]
-        text = text.strip()
-    replies = json.loads(text)
-    if not isinstance(replies, list):
-        raise ValueError(f"Expected a JSON array, got {type(replies)}")
-    return [str(r) for r in replies]
+class GeneratedRepliesOutput(BaseModel):
+    replies: list[str]
 
 
 class LLMService:
@@ -41,7 +33,7 @@ class LLMService:
             return default
         return setting.value
 
-    async def generate_replies(self, post_id: str) -> None:
+    async def generate_replies(self, post_id: str, suggestion: str | None = None) -> None:
         async with self.db_session_factory() as session:
             result = await session.execute(
                 select(Post).options(selectinload(Post.account)).where(Post.id == post_id)
@@ -55,31 +47,44 @@ class LLMService:
                 post.llm_status = "processing"
                 await session.commit()
 
-                messages = await self._build_prompt(session, post)
+                messages = await self._build_prompt(session, post, suggestion)
                 model = await self._get_setting(session, "openrouter_model", "anthropic/claude-sonnet-4-20250514")
                 if isinstance(model, str):
                     model_str = model
                 else:
                     model_str = str(model)
-                replies_count = await self._get_setting(session, "replies_per_post", 10)
-                if isinstance(replies_count, int):
-                    num_replies = replies_count
-                else:
-                    num_replies = int(replies_count)
+
+                json_schema = {
+                    "name": "generated_replies",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "replies": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            }
+                        },
+                        "required": ["replies"],
+                        "additionalProperties": False,
+                    },
+                }
 
                 payload = {
                     "model": model_str,
                     "messages": messages,
                     "temperature": 0.8,
                     "max_tokens": 2000,
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": json_schema,
+                    },
                 }
 
                 response_data = await self._call_openrouter_with_retries(payload)
                 content = response_data["choices"][0]["message"]["content"]
-                reply_texts = parse_replies(content)
-
-                # Trim or pad to expected count
-                reply_texts = reply_texts[:num_replies]
+                parsed = GeneratedRepliesOutput.model_validate_json(content)
+                reply_texts = parsed.replies
 
                 # Delete any existing replies for this post (in case of regeneration)
                 await session.execute(delete(GeneratedReply).where(GeneratedReply.post_id == post.id))
@@ -106,58 +111,56 @@ class LLMService:
                         err_post.llm_status = "failed"
                         await err_session.commit()
 
-    async def _build_prompt(self, session: AsyncSession, post: Post) -> list[dict]:
-        system_prompt = await self._get_setting(
-            session,
-            "system_prompt",
-            "You are a knowledgeable and engaging social media user. Generate reply suggestions that are thoughtful, concise, and varied in tone.",
+    async def _build_prompt(self, session: AsyncSession, post: Post, suggestion: str | None = None) -> list[dict]:
+        default_prompt = (
+            "You are a knowledgeable and engaging social media user.\n\n"
+            "Your interests span across the following fields - and not only these:\n"
+            "- Software engineering\n"
+            "- Backend & Frontend development\n"
+            "- Startups, Tech founders & Indie hackers\n"
+            "- AI (Artificial Intelligence), in particular NLP (Natural Language Processing) and RAG (Retrieval Augmented Generation)\n"
+            "- Marketing & Product-market-fit validation\n\n"
+            "# OBJECTIVE\n\n"
+            "Given a post published by a user on X (Twitter), your goal is to write 10 different replies to that post.\n\n"
+            "# REPLIES STYLE\n\n"
+            "- Write as a human being would - do NOT sound like a bot.\n"
+            '- Type characters that humans normally would use on their phone (e.g., use " instead of \u201c; use en-dash instead of em-dash; don\'t use bold and italic text formatting).\n'
+            "- Write the various replies to the post using different writing styles, tones, verbosity levels, endings (closed vs open ended), purpose (affirmative and supportive vs providing new perspectives and insights), etc."
         )
+        system_prompt = await self._get_setting(session, "system_prompt", default_prompt)
         if isinstance(system_prompt, str):
             system_prompt_str = system_prompt
         else:
             system_prompt_str = str(system_prompt)
 
-        replies_count = await self._get_setting(session, "replies_per_post", 10)
-        num = int(replies_count) if not isinstance(replies_count, int) else replies_count
-
         account = post.account
         username = account.username if account else "unknown"
 
-        base_text = (
-            f'The following is a post published on X/Twitter by @{username}:\n\n'
-            f'"{post.text_content or "(no text)"}"\n\n'
+        user_text = (
+            f"Here is the X post from @{username}:\n\n"
+            f"```\n{post.text_content or '(no text)'}\n```"
         )
 
-        if post.has_media and post.media_local_paths:
-            media_note = "The post also includes the image(s) shown below. Consider BOTH the text content and the visual content of the image(s) when generating replies.\n\n"
-        else:
-            media_note = ""
-
-        instruction = (
-            f"Generate exactly {num} different reply suggestions that I could post as a reply to this post. "
-            f"Each reply must be concise and suitable for X/Twitter (under 280 characters). "
-            f"The replies should vary in tone and angle — some can be agreeing, some challenging, some adding a new perspective, etc.\n\n"
-            f'Return your response as a JSON array of exactly {num} strings. Example format:\n'
-            f'["Reply 1 text", "Reply 2 text", ..., "Reply {num} text"]\n\n'
-            f"Return ONLY the JSON array, no other text."
-        )
-
-        user_text = base_text + media_note + instruction
+        if suggestion:
+            user_text += f"\n\nSuggestion/hint for the replies: {suggestion}"
 
         messages = [{"role": "system", "content": system_prompt_str}]
 
+        # User message with post text
+        messages.append({"role": "user", "content": user_text})
+
+        # Separate user message for images if present
         if post.has_media and post.media_local_paths:
-            content_blocks = [{"type": "text", "text": user_text}]
+            image_blocks: list[dict] = []
             for path in post.media_local_paths:
                 b64 = await self._encode_image_as_base64(path)
                 if b64:
-                    content_blocks.append({
+                    image_blocks.append({
                         "type": "image_url",
                         "image_url": {"url": b64},
                     })
-            messages.append({"role": "user", "content": content_blocks})
-        else:
-            messages.append({"role": "user", "content": user_text})
+            if image_blocks:
+                messages.append({"role": "user", "content": image_blocks})
 
         return messages
 

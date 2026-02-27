@@ -33,3 +33,7 @@ class PostListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class GenerateRequest(BaseModel):
+    suggestion: str | None = None

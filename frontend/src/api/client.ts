@@ -73,7 +73,6 @@ export interface AccountList {
 export interface Settings {
   openrouter_model: string;
   system_prompt: string;
-  replies_per_post: number;
   openrouter_api_key: string;
   x_api_key: string;
 }
@@ -125,8 +124,11 @@ export const api = {
   getPosts: (params: Record<string, string>) =>
     request<PostList>(`/posts?${new URLSearchParams(params)}`),
   getPost: (id: string) => request<Post>(`/posts/${id}`),
-  regenerateReplies: (id: string) =>
-    request<Post>(`/posts/${id}/regenerate`, { method: 'POST' }),
+  regenerateReplies: (id: string, suggestion?: string) =>
+    request<Post>(`/posts/${id}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify(suggestion ? { suggestion } : {}),
+    }),
 
   // Accounts
   getAccounts: (params?: Record<string, string>) =>

@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     x_api_key: str = ""
     llm_model: str = "anthropic/claude-sonnet-4-20250514"
-    replies_per_post: int = 10
     media_dir: str = "/app/data/media"
     static_dir: str = "/app/static"
 

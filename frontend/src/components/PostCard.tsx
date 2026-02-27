@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Post } from '../api/client'
 import { api } from '../api/client'
 import ReplyList from './ReplyList'
@@ -15,10 +15,27 @@ export default function PostCard({ post }: Props) {
 
   const timeAgo = formatTimeAgo(currentPost.posted_at)
 
-  const handleRegenerate = async () => {
-    const updated = await api.regenerateReplies(currentPost.id)
+  const handleRegenerate = async (suggestion?: string) => {
+    const updated = await api.regenerateReplies(currentPost.id, suggestion)
     setCurrentPost(updated)
   }
+
+  // Poll for completion when LLM is processing
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    if (currentPost.llm_status === 'processing') {
+      pollRef.current = setInterval(async () => {
+        try {
+          const fresh = await api.getPost(currentPost.id)
+          if (fresh.llm_status !== 'processing') {
+            setCurrentPost(fresh)
+            if (pollRef.current) clearInterval(pollRef.current)
+          }
+        } catch { /* ignore poll errors */ }
+      }, 2000)
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [currentPost.llm_status, currentPost.id])
 
   const postTypeConfig: Record<string, { label: string; style: string }> = {
     tweet: { label: 'POST', style: 'text-accent bg-accent-soft' },

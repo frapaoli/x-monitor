@@ -10,8 +10,21 @@ router = APIRouter()
 
 DEFAULT_SETTINGS = {
     "openrouter_model": "anthropic/claude-sonnet-4-20250514",
-    "system_prompt": "You are a knowledgeable and engaging social media user. Generate reply suggestions that are thoughtful, concise, and varied in tone.",
-    "replies_per_post": 10,
+    "system_prompt": (
+        "You are a knowledgeable and engaging social media user.\n\n"
+        "Your interests span across the following fields - and not only these:\n"
+        "- Software engineering\n"
+        "- Backend & Frontend development\n"
+        "- Startups, Tech founders & Indie hackers\n"
+        "- AI (Artificial Intelligence), in particular NLP (Natural Language Processing) and RAG (Retrieval Augmented Generation)\n"
+        "- Marketing & Product-market-fit validation\n\n"
+        "# OBJECTIVE\n\n"
+        "Given a post published by a user on X (Twitter), your goal is to write 10 different replies to that post.\n\n"
+        "# REPLIES STYLE\n\n"
+        "- Write as a human being would - do NOT sound like a bot.\n"
+        '- Type characters that humans normally would use on their phone (e.g., use " instead of \u201c; use en-dash instead of em-dash; don\'t use bold and italic text formatting).\n'
+        "- Write the various replies to the post using different writing styles, tones, verbosity levels, endings (closed vs open ended), purpose (affirmative and supportive vs providing new perspectives and insights), etc."
+    ),
     "openrouter_api_key": "",
     "x_api_key": "",
 }
@@ -32,7 +45,6 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
     return SettingsResponse(
         openrouter_model=str(s["openrouter_model"]),
         system_prompt=str(s["system_prompt"]),
-        replies_per_post=int(s["replies_per_post"]),
         openrouter_api_key=_mask_key(str(s.get("openrouter_api_key", ""))),
         x_api_key=_mask_key(str(s.get("x_api_key", ""))),
     )
@@ -69,7 +81,6 @@ async def update_settings(data: SettingsUpdate, db: AsyncSession = Depends(get_d
     return SettingsResponse(
         openrouter_model=str(s["openrouter_model"]),
         system_prompt=str(s["system_prompt"]),
-        replies_per_post=int(s["replies_per_post"]),
         openrouter_api_key=_mask_key(str(s.get("openrouter_api_key", ""))),
         x_api_key=_mask_key(str(s.get("x_api_key", ""))),
     )

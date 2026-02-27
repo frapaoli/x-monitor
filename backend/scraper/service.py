@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -131,7 +130,7 @@ class RetrievalService:
                             acct.profile_image_url = tweet.author_profile_image_url
 
                 # Create Post rows
-                pending_llm_post_ids: list[str] = []
+                post_count = 0
                 for tweet in all_tweets:
                     acct = by_username.get(tweet.author_username)
                     if not acct:
@@ -159,16 +158,12 @@ class RetrievalService:
                     )
                     session.add(post)
                     await session.flush()
-                    pending_llm_post_ids.append(str(post.id))
+                    post_count += 1
 
                 batch.status = "completed"
                 await session.commit()
 
-            # Trigger LLM after commit
-            for post_id in pending_llm_post_ids:
-                asyncio.create_task(self.llm_service.generate_replies(post_id))
-
-            logger.info(f"Retrieval {batch_id} completed: {len(pending_llm_post_ids)} posts")
+            logger.info(f"Retrieval {batch_id} completed: {post_count} posts")
 
         except Exception as e:
             logger.error(f"Retrieval {batch_id} failed: {e}")

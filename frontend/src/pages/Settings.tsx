@@ -20,7 +20,6 @@ export default function Settings() {
 
   const [model, setModel] = useState('')
   const [prompt, setPrompt] = useState('')
-  const [repliesCount, setRepliesCount] = useState(10)
   const [apiKey, setApiKey] = useState('')
   const [xApiKey, setXApiKey] = useState('')
 
@@ -37,7 +36,6 @@ export default function Settings() {
       setSettings(s)
       setModel(s.openrouter_model)
       setPrompt(s.system_prompt)
-      setRepliesCount(s.replies_per_post)
       setApiKey('')
       setXApiKey('')
     } catch {
@@ -124,32 +122,6 @@ export default function Settings() {
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
-          </div>
-
-          {/* Replies per post */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-medium text-fg-2">
-                Replies per post: <span className="text-accent tabular-nums font-mono">{repliesCount}</span>
-              </label>
-              <SaveIndicator status={fieldStatus['replies_per_post']} />
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={20}
-              value={repliesCount}
-              onChange={e => {
-                const v = Number(e.target.value)
-                setRepliesCount(v)
-                saveField('replies_per_post', v)
-              }}
-              className="w-full"
-            />
-            <div className="flex justify-between text-[10px] text-fg-4 mt-1 font-mono">
-              <span>1</span>
-              <span>20</span>
-            </div>
           </div>
 
           {/* System prompt */}

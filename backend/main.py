@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -74,17 +73,16 @@ async def lifespan(app: FastAPI):
     )
     app_state["retrieval_service"] = retrieval_service
 
-    # Recovery: process any pending/stuck posts
+    # Recovery: reset any stuck "processing" posts back to "pending"
     try:
         async with async_session_factory() as session:
+            from sqlalchemy import update
             result = await session.execute(
-                select(Post).where(Post.llm_status.in_(["pending", "processing"]))
+                update(Post).where(Post.llm_status == "processing").values(llm_status="pending")
             )
-            pending_posts = result.scalars().all()
-            if pending_posts:
-                logger.info(f"Recovery: found {len(pending_posts)} posts needing LLM generation")
-                for post in pending_posts:
-                    asyncio.create_task(llm_service.generate_replies(str(post.id)))
+            if result.rowcount:
+                logger.info(f"Recovery: reset {result.rowcount} stuck processing posts to pending")
+            await session.commit()
     except Exception as e:
         logger.warning(f"Recovery check failed: {e}")
 

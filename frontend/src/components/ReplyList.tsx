@@ -6,7 +6,7 @@ import { useToast } from './Toast'
 interface Props {
   replies: Reply[]
   postLlmStatus: string
-  onRegenerate: () => void
+  onRegenerate: (suggestion?: string) => Promise<void>
   onReplyUpdate?: (updated: Reply) => void
 }
 
@@ -15,6 +15,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
   const [regenerating, setRegenerating] = useState(false)
   const [localReplies, setLocalReplies] = useState<Reply[]>(replies)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [suggestion, setSuggestion] = useState('')
 
   if (replies !== localReplies && replies.length > 0 && replies[0]?.id !== localReplies[0]?.id) {
     setLocalReplies(replies)
@@ -76,7 +77,7 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
             <span className="text-sm text-err">Generation failed</span>
           </div>
           <button
-            onClick={onRegenerate}
+            onClick={() => onRegenerate()}
             className="flex items-center gap-1.5 text-xs font-medium text-accent hover:text-accent-2 px-3 py-1.5 rounded-lg border border-accent/20 hover:bg-accent-soft transition-colors"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -89,14 +90,45 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
     )
   }
 
-  if (postLlmStatus === 'pending' || localReplies.length === 0) {
+  if (postLlmStatus === 'pending' || (postLlmStatus !== 'processing' && localReplies.length === 0)) {
     return (
-      <div className="mt-3 rounded-lg bg-elevated/30 border border-edge p-4">
-        <div className="flex items-center gap-2 text-fg-3">
-          <svg className="w-3.5 h-3.5 animate-pulse-soft" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-sm">Replies pending...</span>
+      <div className="mt-3 rounded-lg bg-elevated/30 border border-edge p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={suggestion}
+            onChange={e => setSuggestion(e.target.value)}
+            placeholder="Optional: hint or direction for replies..."
+            className="flex-1 bg-surface border border-edge-2 rounded-lg px-3 py-2 text-sm text-fg placeholder:text-fg-4 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors"
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !regenerating) {
+                setRegenerating(true)
+                onRegenerate(suggestion || undefined).finally(() => setRegenerating(false))
+              }
+            }}
+          />
+          <button
+            onClick={async () => {
+              setRegenerating(true)
+              try { await onRegenerate(suggestion || undefined) } finally { setRegenerating(false) }
+            }}
+            disabled={regenerating}
+            className="flex items-center gap-1.5 text-xs font-medium text-accent hover:text-accent-2 px-3.5 py-2 rounded-lg border border-accent/20 hover:bg-accent-soft transition-colors disabled:opacity-40 whitespace-nowrap"
+          >
+            {regenerating ? (
+              <>
+                <Spinner />
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate
+              </>
+            )}
+          </button>
         </div>
       </div>
     )
@@ -104,9 +136,9 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
 
   return (
     <div className="mt-3">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2 px-1">
-        <div className="flex items-center gap-2">
+      {/* Suggestion input + regenerate */}
+      <div className="flex items-center gap-2 mb-2 px-1">
+        <div className="flex items-center gap-2 shrink-0">
           <svg className="w-3.5 h-3.5 text-fg-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
@@ -114,13 +146,26 @@ export default function ReplyList({ replies, postLlmStatus, onRegenerate, onRepl
             {localReplies.length} replies
           </span>
         </div>
+        <input
+          type="text"
+          value={suggestion}
+          onChange={e => setSuggestion(e.target.value)}
+          placeholder="Hint for regeneration..."
+          className="flex-1 min-w-0 bg-surface border border-edge-2 rounded-lg px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-4 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors"
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !regenerating) {
+              setRegenerating(true)
+              onRegenerate(suggestion || undefined).finally(() => setRegenerating(false))
+            }
+          }}
+        />
         <button
           onClick={async () => {
             setRegenerating(true)
-            try { await onRegenerate() } finally { setRegenerating(false) }
+            try { await onRegenerate(suggestion || undefined) } finally { setRegenerating(false) }
           }}
           disabled={regenerating}
-          className="flex items-center gap-1.5 text-xs text-fg-3 hover:text-accent transition-colors disabled:opacity-40"
+          className="flex items-center gap-1.5 text-xs text-fg-3 hover:text-accent transition-colors disabled:opacity-40 shrink-0"
         >
           <svg className={`w-3 h-3 ${regenerating ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
